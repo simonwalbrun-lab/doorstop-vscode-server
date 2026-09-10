@@ -25,6 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -37,12 +39,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
       - run: pip install build
       - run: python -m build
+      - name: Verify built version matches tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          built=$(python -c "import pathlib,re; f=next(pathlib.Path('dist').glob('*.tar.gz')); print(re.match(r'doorstop_vscode_server-(.+)\.tar\.gz', f.name).group(1))")
+          if [ "$built" != "$version" ]; then
+            echo "::error::Built version ($built) does not match tag version ($version)"
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: dist
