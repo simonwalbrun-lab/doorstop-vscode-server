@@ -169,3 +169,8 @@ def test_publish_html_nests_under_documents_subfolder(client, document, tmp_path
     assert response.status_code == 200
     nested = destination.parent / "documents" / destination.name
     assert nested.exists()
+    # Spec 004 FR-008: the reported path must be the one that was really
+    # written, not the one that was requested - Doorstop's own publish()
+    # returns the requested path here, which does not exist on disk.
+    assert response.json()["path"] == str(nested)
+    assert not destination.exists()

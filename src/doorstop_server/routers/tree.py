@@ -38,6 +38,7 @@ async def get_tree_structure(tree=Depends(get_tree)) -> TreeResponse:
                     level=str(item.level),
                     header=str(item.header) if item.header else None,
                     text=str(item.text) if item.text else None,
+                    ref=str(item.ref) if item.ref else None,
                     active=item.active,
                     normative=item.normative,
                     derived=item.derived,

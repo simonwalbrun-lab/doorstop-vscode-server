@@ -94,6 +94,7 @@ class ItemNode(BaseModel):
     level: str
     header: Optional[str] = None
     text: Optional[str] = None
+    ref: Optional[str] = None
     active: bool
     normative: bool
     derived: bool
@@ -114,3 +115,28 @@ class DocumentNode(BaseModel):
 
 class TreeResponse(BaseModel):
     documents: List[DocumentNode]
+
+
+FieldAnchor = Literal[
+    "document", "level", "text", "reviewed", "links", "link_entry", "derived", "ref"
+]
+
+
+class ValidationIssue(BaseModel):
+    """One problem Doorstop reports, classified and anchored.
+
+    ``uids`` carries the fan-out: a problem naming several items (a duplicate
+    level, say) is ONE record listing them all, not one record each.
+    """
+
+    severity: Literal["error", "warning", "info"]
+    check: str
+    message: str
+    documentPrefix: str
+    uids: List[str]
+    relatedUid: Optional[str] = None
+    field: Optional[FieldAnchor] = None
+
+
+class ValidationResponse(BaseModel):
+    issues: List[ValidationIssue]
