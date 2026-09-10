@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import doorstop
+
 from .conftest import set_item_text
 
 
@@ -73,3 +75,29 @@ def test_tree_link_to_dangling_parent_is_suspect(client, document):
     body = client.get("/tree").json()
     node = next(i for d in body["documents"] for i in d["items"] if i["uid"] == child["uid"])
     assert node["links"] == [{"uid": parent["uid"], "suspect": True}]
+
+def test_tree_reports_item_ref(client, document, project_root):
+    """`ref` is part of the item payload so the extension can show it without
+    reading and parsing the requirement file itself."""
+    created = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    tree = doorstop.build(
+        cwd=str(project_root), root=str(project_root), request_next_number=None
+    )
+    tree.find_item(created["uid"]).ref = "src/module.py"
+
+    response = client.get("/tree")
+
+    assert response.status_code == 200
+    items = response.json()["documents"][0]["items"]
+    item = next(entry for entry in items if entry["uid"] == created["uid"])
+    assert item["ref"] == "src/module.py"
+
+
+def test_tree_reports_null_ref_when_unset(client, document):
+    created = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+
+    response = client.get("/tree")
+
+    items = response.json()["documents"][0]["items"]
+    item = next(entry for entry in items if entry["uid"] == created["uid"])
+    assert item["ref"] is None

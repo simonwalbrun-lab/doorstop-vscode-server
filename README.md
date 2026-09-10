@@ -36,3 +36,29 @@ pytest
 - `tests/conftest.py` — shared fixtures (`client`, `project_root`, `document`) and a `set_item_text` helper for mutating an item directly via the Doorstop API (bypassing the server) to simulate out-of-band edits.
 - `tests/test_serialization.py` — proves the one-request-at-a-time guarantee black-box: fires concurrent `/items` calls and checks for zero UID collisions/gaps, rather than inspecting the lock directly.
 - `tests/test_errors.py` — pins down the structured `{"error": {"code", "message"}}` shape for both expected (`DoorstopError`) and unexpected exceptions.
+
+## Doorstop version coupling
+
+`src/doorstop_server/validation_rules.py` recognises Doorstop's validation
+output by matching its **message wording**, because Doorstop 3.2 yields issues
+as bare `DoorstopError` / `DoorstopWarning` / `DoorstopInfo` objects carrying
+nothing but a string - no check id, no item reference, no field.
+
+`CHECK_TABLE` in that file is therefore pinned to Doorstop 3.2. **On a Doorstop
+upgrade, re-check it**: run the test suite first (several tests assert exact
+`check` ids against real Doorstop output and will fail loudly if the wording
+moved), then compare against `contracts/validation-api.md` section 2 in the
+extension repo.
+
+Two things limit the damage of a missed change:
+
+- An unmatched message is never dropped. It is returned as `check: "unknown"`
+  with `field: null` at Doorstop's own severity, so the user still sees the
+  problem - only its placement degrades to the item's first line.
+- The coupling lives in exactly one named file.
+
+`GET /validate` must also keep running under `read_only_validation()`. Doorstop's
+validation **rewrites requirement files** with its shipped defaults: a plain
+`get_issues()` pass over a 9-item project rewrote 7 files and silently stamped
+away a suspect link instead of reporting it. `test_validate_writes_nothing`
+is the regression test for this.

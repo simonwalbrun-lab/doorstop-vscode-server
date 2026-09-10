@@ -84,12 +84,35 @@ async def import_into_document(prefix: str, body: ImportRequest, tree=Depends(ge
     return DocumentResponse(prefix=str(document.prefix), path=document.path)
 
 
+def _resolve_written_path(reported: str | None, requested: str) -> str:
+    """The path the renderer really wrote.
+
+    Doorstop's ``publish``/``export`` return the destination they were *asked*
+    for, which is not always where the output lands: publishing HTML, for
+    instance, nests the document under a ``documents/`` directory next to the
+    requested file (and drops a ``template/`` directory beside it). Reporting the
+    requested path in that case sends the user to a file that does not exist,
+    which is exactly what spec 004 FR-008 exists to prevent.
+
+    Falls back to the reported path when nothing can be confirmed on disk, so a
+    renderer this does not know about is never made worse.
+    """
+    candidate = reported or requested
+    if Path(candidate).exists():
+        return candidate
+
+    nested = Path(candidate).parent / "documents" / Path(candidate).name
+    if nested.exists():
+        return str(nested)
+    return candidate
+
+
 @router.post("/{prefix}/export", response_model=ExportResponse)
 async def export_document(prefix: str, body: ExportRequest, tree=Depends(get_tree)) -> ExportResponse:
     document = tree.find_document(prefix)
     ext = _EXPORT_EXTENSIONS[body.format]
     path = exporter.export(document, body.destinationPath, ext=ext)
-    return ExportResponse(path=path or body.destinationPath)
+    return ExportResponse(path=_resolve_written_path(path, body.destinationPath))
 
 
 @router.post("/{prefix}/publish", response_model=PublishResponse)
@@ -97,4 +120,4 @@ async def publish_document(prefix: str, body: PublishRequest, tree=Depends(get_t
     document = tree.find_document(prefix)
     ext = _PUBLISH_EXTENSIONS[body.format]
     path = publisher.publish(document, body.destinationPath, ext=ext)
-    return PublishResponse(path=path or body.destinationPath)
+    return PublishResponse(path=_resolve_written_path(path, body.destinationPath))
