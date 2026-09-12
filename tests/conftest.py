@@ -40,3 +40,18 @@ def set_item_text(project_root: Path, uid: str, text: str) -> None:
     tree = doorstop.build(cwd=str(project_root), root=str(project_root), request_next_number=None)
     item = tree.find_item(uid)
     item.text = text
+
+
+def set_item_attributes(project_root: Path, uid: str, **attributes) -> None:
+    """Sets arbitrary item attributes (level, normative, ...) via the Doorstop API,
+    bypassing the server - for shaping a document before a request is made."""
+    tree = doorstop.build(cwd=str(project_root), root=str(project_root), request_next_number=None)
+    item = tree.find_item(uid)
+    for key, value in attributes.items():
+        setattr(item, key, value)
+
+
+def tree_items(client, prefix: str) -> list:
+    """The items of one document as GET /tree reports them."""
+    tree = client.get("/tree").json()
+    return next(d for d in tree["documents"] if d["prefix"] == prefix)["items"]

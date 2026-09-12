@@ -24,6 +24,11 @@ doorstop-vscode-server --project <path-to-doorstop-project-root> --host 127.0.0.
 
 See `src/doorstop_server/routers/` for the endpoint implementations. `GET /health` is the only route that is not serialized behind the request lock.
 
+- `GET /tree` — every document with its items in Doorstop's own order (level, then UID); inactive items included (`routers/tree.py`)
+- `POST /documents/{prefix}/items` — create an item; optional `level`, or `after` (UID of an item of the same document: the new item gets Doorstop's "append after" level and the followers are renumbered), plus `header` / `text` (`routers/documents.py`)
+- `PATCH /items/{uid}` — set `header` and/or `text` through Doorstop's own setters, one file write (`routers/items.py`)
+- `DELETE /items/{uid}` — remove the item and renumber the document like `doorstop remove` (`routers/items.py`)
+
 ## Tests
 
 The test suite exercises the real FastAPI app against a temporary Doorstop project (no mocking of Doorstop itself), so it doubles as a pinned-down contract for the HTTP interface — every request/response shape, status code, and error format a test asserts on is something the extension can rely on.

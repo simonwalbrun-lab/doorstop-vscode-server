@@ -24,6 +24,18 @@ class DocumentResponse(BaseModel):
 
 class AddItemRequest(BaseModel):
     level: Optional[str] = None
+    # UID of an item of the same document to insert after (spec 019): the new
+    # level is derived from it by Doorstop's own append rule. Exclusive with level.
+    after: Optional[str] = None
+    header: Optional[str] = None
+    text: Optional[str] = None
+
+
+class UpdateItemRequest(BaseModel):
+    """Partial update of an item's editable prose (spec 019). At least one field."""
+
+    header: Optional[str] = None
+    text: Optional[str] = None
 
 
 class ItemResponse(BaseModel):

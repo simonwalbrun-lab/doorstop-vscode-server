@@ -46,7 +46,9 @@ async def get_tree_structure(tree=Depends(get_tree)) -> TreeResponse:
                     cleared=item.cleared,
                     links=_item_links(item, tree),
                 )
-                for item in document
+                # Doorstop's own order (Item.__lt__: level, then UID) rather than
+                # file-load order; `document.items` would also drop inactive items.
+                for item in sorted(document)
             ],
         )
         for document in tree

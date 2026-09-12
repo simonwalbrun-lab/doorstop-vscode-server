@@ -2,7 +2,7 @@ from pathlib import Path
 
 import doorstop
 
-from .conftest import set_item_text
+from .conftest import set_item_attributes, set_item_text, tree_items
 
 
 def test_tree_reflects_documents_and_items(client, document):
@@ -101,3 +101,19 @@ def test_tree_reports_null_ref_when_unset(client, document):
     items = response.json()["documents"][0]["items"]
     item = next(entry for entry in items if entry["uid"] == created["uid"])
     assert item["ref"] is None
+
+
+def test_tree_items_are_sorted_by_level(client, document, project_root):
+    # spec 019: the document view relies on the server's order, not file-load order.
+    prefix = document["prefix"]
+    first = client.post(f"/documents/{prefix}/items", json={}).json()
+    second = client.post(f"/documents/{prefix}/items", json={}).json()
+    third = client.post(f"/documents/{prefix}/items", json={}).json()
+    set_item_attributes(project_root, first["uid"], level="2.0")
+    set_item_attributes(project_root, second["uid"], level="1.1")
+    set_item_attributes(project_root, third["uid"], level="1.0")
+
+    items = tree_items(client, prefix)
+
+    assert [i["level"] for i in items] == ["1.0", "1.1", "2.0"]
+    assert [i["uid"] for i in items] == [third["uid"], second["uid"], first["uid"]]

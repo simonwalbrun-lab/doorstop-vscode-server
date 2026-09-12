@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 
 from doorstop_server.deps import get_tree
 from doorstop_server.errors import DoorstopApiError
+from doorstop_server.routers.items import apply_prose
 from doorstop_server.schemas import (
     AddItemRequest,
     CreateDocumentRequest,
@@ -39,10 +40,37 @@ async def create_document(body: CreateDocumentRequest, tree=Depends(get_tree)) -
     return DocumentResponse(prefix=str(document.prefix), path=document.path)
 
 
+def _level_after(anchor):
+    """The level Doorstop itself would give an item appended after ``anchor``.
+
+    Mirrors ``Document.add_item``'s rule for the last item: a heading (``1.0``)
+    gets its first child (``1.1``), anything else its next sibling (``1.3`` after
+    ``1.2``). ``add_item(level=...)`` then shifts the existing occupants.
+    """
+    if anchor.level.heading:
+        level = anchor.level >> 1
+        level.heading = False
+        return level
+    return anchor.level + 1
+
+
 @router.post("/{prefix}/items", response_model=ItemResponse)
 async def add_item(prefix: str, body: AddItemRequest, tree=Depends(get_tree)) -> ItemResponse:
     document = tree.find_document(prefix)
-    item = document.add_item(level=body.level)
+    if body.after is not None and body.level is not None:
+        raise DoorstopApiError(422, "INVALID_REQUEST", "after and level are mutually exclusive")
+    level = body.level
+    if body.after is not None:
+        anchor = tree.find_item(body.after)
+        if str(anchor.document.prefix) != str(document.prefix):
+            raise DoorstopApiError(
+                400, "DOORSTOP_ERROR", f"{body.after} is not an item of document {prefix}"
+            )
+        level = _level_after(anchor)
+    item = document.add_item(level=level)
+    if body.header is not None or body.text is not None:
+        apply_prose(item, body.header, body.text)
+    # The level after Doorstop's reorder, not the requested one.
     return ItemResponse(uid=str(item.uid), path=item.path, level=str(item.level))
 
 
