@@ -27,6 +27,10 @@ class AddItemRequest(BaseModel):
     # UID of an item of the same document to insert after (spec 019): the new
     # level is derived from it by Doorstop's own append rule. Exclusive with level.
     after: Optional[str] = None
+    # Insert before the document's current first item (spec 019): the new item
+    # takes that item's level and Doorstop shifts it and its followers down.
+    # Exclusive with after and level.
+    first: Optional[bool] = None
     header: Optional[str] = None
     text: Optional[str] = None
 

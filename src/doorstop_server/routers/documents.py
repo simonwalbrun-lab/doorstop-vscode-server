@@ -57,8 +57,11 @@ def _level_after(anchor):
 @router.post("/{prefix}/items", response_model=ItemResponse)
 async def add_item(prefix: str, body: AddItemRequest, tree=Depends(get_tree)) -> ItemResponse:
     document = tree.find_document(prefix)
-    if body.after is not None and body.level is not None:
-        raise DoorstopApiError(422, "INVALID_REQUEST", "after and level are mutually exclusive")
+    positions = [name for name, value in (("after", body.after), ("level", body.level), ("first", body.first)) if value]
+    if len(positions) > 1:
+        raise DoorstopApiError(
+            422, "INVALID_REQUEST", f"{' and '.join(positions)} are mutually exclusive"
+        )
     level = body.level
     if body.after is not None:
         anchor = tree.find_item(body.after)
@@ -67,6 +70,12 @@ async def add_item(prefix: str, body: AddItemRequest, tree=Depends(get_tree)) ->
                 400, "DOORSTOP_ERROR", f"{body.after} is not an item of document {prefix}"
             )
         level = _level_after(anchor)
+    elif body.first:
+        # The current first item's own level: add_item's reorder(keep=item)
+        # then shifts that item and everything after it down, so the new item
+        # really is first in reading order. An empty document needs no level.
+        existing = document.items
+        level = existing[0].level.copy() if existing else None
     item = document.add_item(level=level)
     if body.header is not None or body.text is not None:
         apply_prose(item, body.header, body.text)

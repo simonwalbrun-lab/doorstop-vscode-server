@@ -263,3 +263,67 @@ def test_add_item_with_header_and_text_only(client, document):
     node = tree_items(client, document["prefix"])[0]
     assert node["header"] == "Only"
     assert node["text"] == "Prose"
+
+
+def test_add_item_first_in_a_document_with_items(client, document):
+    prefix = document["prefix"]
+    a = client.post(f"/documents/{prefix}/items", json={"level": "1.1"}).json()
+    b = client.post(f"/documents/{prefix}/items", json={"level": "1.2"}).json()
+
+    response = client.post(
+        f"/documents/{prefix}/items", json={"first": True, "header": "Intro", "text": "First."}
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["level"] == "1.1"
+    items = tree_items(client, prefix)
+    # The new item leads the document and the former first item moved down.
+    assert items[0]["uid"] == response.json()["uid"]
+    assert items[0]["header"] == "Intro"
+    assert items[0]["text"] == "First."
+    levels = {i["uid"]: i["level"] for i in items}
+    assert levels[a["uid"]] == "1.2"
+    assert levels[b["uid"]] == "1.3"
+
+
+def test_add_item_first_before_a_heading_level(client, document):
+    prefix = document["prefix"]
+    a = client.post(f"/documents/{prefix}/items", json={"level": "1.0"}).json()
+    b = client.post(f"/documents/{prefix}/items", json={"level": "1.1"}).json()
+
+    response = client.post(f"/documents/{prefix}/items", json={"first": True})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["level"] == "1.0"
+    items = tree_items(client, prefix)
+    assert items[0]["uid"] == response.json()["uid"]
+    levels = {i["uid"]: i["level"] for i in items}
+    assert levels[a["uid"]] == "2.0"
+    assert levels[b["uid"]] == "2.1"
+
+
+def test_add_item_first_in_an_empty_document(client, document):
+    response = client.post(f"/documents/{document['prefix']}/items", json={"first": True})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["level"] == "1.0"
+    assert len(tree_items(client, document["prefix"])) == 1
+
+
+def test_add_item_first_and_after_returns_422(client, document):
+    prefix = document["prefix"]
+    a = client.post(f"/documents/{prefix}/items", json={}).json()
+
+    response = client.post(f"/documents/{prefix}/items", json={"first": True, "after": a["uid"]})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "INVALID_REQUEST"
+
+
+def test_add_item_first_and_level_returns_422(client, document):
+    response = client.post(
+        f"/documents/{document['prefix']}/items", json={"first": True, "level": "1.1"}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "INVALID_REQUEST"
