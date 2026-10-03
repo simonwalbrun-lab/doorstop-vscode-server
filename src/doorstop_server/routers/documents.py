@@ -156,5 +156,5 @@ async def export_document(prefix: str, body: ExportRequest, tree=Depends(get_tre
 async def publish_document(prefix: str, body: PublishRequest, tree=Depends(get_tree)) -> PublishResponse:
     document = tree.find_document(prefix)
     ext = _PUBLISH_EXTENSIONS[body.format]
-    path = publisher.publish(document, body.destinationPath, ext=ext)
+    path = publisher.publish(document, body.destinationPath, ext=ext, template=body.template)
     return PublishResponse(path=_resolve_written_path(path, body.destinationPath))

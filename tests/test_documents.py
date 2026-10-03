@@ -178,6 +178,24 @@ def test_publish_html_nests_under_documents_subfolder(client, document, tmp_path
     assert not destination.exists()
 
 
+def test_publish_with_missing_template_is_a_doorstop_error(client, document, tmp_path):
+    """Spec 020 US3: a template the document does not have fails as a
+    structured Doorstop error, not a crash or a silent default."""
+    client.post(f"/documents/{document['prefix']}/items", json={})
+
+    response = client.post(
+        f"/documents/{document['prefix']}/publish",
+        json={
+            "format": "html",
+            "destinationPath": str(tmp_path / "publish.html"),
+            "template": "custom",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "DOORSTOP_ERROR"
+
+
 # --- spec 019: POST /documents/{prefix}/items with after / header / text ---
 
 

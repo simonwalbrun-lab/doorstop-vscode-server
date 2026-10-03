@@ -93,6 +93,8 @@ class ExportResponse(BaseModel):
 class PublishRequest(BaseModel):
     format: Literal["markdown", "html", "latex"]
     destinationPath: str
+    # Name of a template in the document's ``template`` folder (spec 020 US3).
+    template: Optional[str] = None
 
 
 class PublishResponse(BaseModel):
