@@ -158,3 +158,24 @@ class ValidationIssue(BaseModel):
 
 class ValidationResponse(BaseModel):
     issues: List[ValidationIssue]
+
+
+class FilterRequest(BaseModel):
+    query: str
+
+
+class FilterItem(BaseModel):
+    uid: str
+    documentPrefix: str
+    level: str
+    header: Optional[str] = None
+    text: Optional[str] = None
+    path: str
+    # One display value per FilterResponse.columns entry, already formatted.
+    values: List[str]
+
+
+class FilterResponse(BaseModel):
+    # Table columns after UID: the cell's `order:` or the default columns.
+    columns: List[str]
+    items: List[FilterItem]
