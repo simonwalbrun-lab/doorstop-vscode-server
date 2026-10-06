@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from doorstop_server.deps import get_tree
+from doorstop_server.deps import get_tree, load_items
 from doorstop_server.schemas import ValidationIssue, ValidationResponse
 from doorstop_server.validation_rules import collect_issues
 
@@ -17,7 +17,7 @@ async def validate_tree(tree=Depends(get_tree)) -> ValidationResponse:
     duplicate levels cannot be judged from a single file, so there is no
     per-file variant of this call.
     """
-    tree.load()
+    load_items(tree)
     issues = [
         ValidationIssue(
             severity=record.severity,

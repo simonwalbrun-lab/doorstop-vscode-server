@@ -1,6 +1,9 @@
 import asyncio
+import time
 
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from doorstop_server import timing
 
 _UNLOCKED_PATHS = {"/health"}
 
@@ -20,6 +23,9 @@ class SerializeRequestsMiddleware:
     The lock is created per middleware instance (i.e. per app / per
     create_app() call), not as a module-level global, so it's always bound to
     whatever event loop first serves that app.
+
+    It also reports how long the request waited for the lock, loaded the tree
+    and worked, as a Server-Timing header (spec 023, timing.py).
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -27,8 +33,27 @@ class SerializeRequestsMiddleware:
         self.lock = asyncio.Lock()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope["path"] in _UNLOCKED_PATHS:
+        if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+
+        current = dict.fromkeys(timing.STAGE_NAMES, 0.0)
+        timing.stages.set(current)
+        acquired = time.perf_counter()
+
+        async def send_with_timing(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                current["work"] = max(0.0, (time.perf_counter() - acquired) * 1000 - current["load"])
+                route = getattr(scope.get("route"), "path", scope["path"])
+                header = (b"server-timing", timing.header_value(current, f'{scope["method"]} {route}'))
+                message = {**message, "headers": [*message.get("headers", []), header]}
+            await send(message)
+
+        if scope["path"] in _UNLOCKED_PATHS:
+            await self.app(scope, receive, send_with_timing)
+            return
         async with self.lock:
-            await self.app(scope, receive, send)
+            # send_with_timing reads `acquired` when it runs, so work starts here.
+            current["wait"] = (time.perf_counter() - acquired) * 1000
+            acquired = time.perf_counter()
+            await self.app(scope, receive, send_with_timing)

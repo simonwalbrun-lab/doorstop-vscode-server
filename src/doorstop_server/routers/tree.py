@@ -1,7 +1,7 @@
 from doorstop.common import DoorstopError
 from fastapi import APIRouter, Depends
 
-from doorstop_server.deps import get_tree
+from doorstop_server.deps import get_tree, load_items
 from doorstop_server.schemas import DocumentNode, ItemNode, LinkInfo, TreeResponse
 
 router = APIRouter()
@@ -22,7 +22,7 @@ def _item_links(item, tree) -> list[LinkInfo]:
 
 @router.get("/tree", response_model=TreeResponse)
 async def get_tree_structure(tree=Depends(get_tree)) -> TreeResponse:
-    tree.load()
+    load_items(tree)
     documents = [
         DocumentNode(
             prefix=str(document.prefix),

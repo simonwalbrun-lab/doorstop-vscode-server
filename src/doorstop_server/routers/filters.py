@@ -21,7 +21,7 @@ import yaml
 from doorstop.core.types import Level
 from fastapi import APIRouter, Depends
 
-from doorstop_server.deps import get_tree
+from doorstop_server.deps import get_tree, load_items
 from doorstop_server.errors import DoorstopApiError
 from doorstop_server.schemas import FilterItem, FilterRequest, FilterResponse
 
@@ -241,7 +241,7 @@ async def filter_items(body: FilterRequest, tree=Depends(get_tree)) -> FilterRes
     predicate, columns = compile_filter(body.query)
     default_columns = columns is None
     columns = DEFAULT_COLUMNS if columns is None else columns
-    tree.load()
+    load_items(tree)
     # Same order as GET /tree (Doorstop's Item.__lt__: level, then UID);
     # inactive items are included.
     ordered = [item for document in tree for item in sorted(document)]
