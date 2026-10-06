@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from doorstop_server.deps import get_tree
+from doorstop_server.deps import get_tree_for_reading
 
 
 def test_doorstop_error_becomes_structured_400(client):
@@ -23,7 +23,7 @@ def test_unexpected_exception_becomes_structured_500(client):
     def broken_tree():
         raise RuntimeError("boom")
 
-    app.dependency_overrides[get_tree] = broken_tree
+    app.dependency_overrides[get_tree_for_reading] = broken_tree
     try:
         # Starlette's ServerErrorMiddleware builds the correct response *and* still
         # re-raises the original exception afterward for Exception-class handlers
@@ -33,7 +33,7 @@ def test_unexpected_exception_becomes_structured_500(client):
         no_raise_client = TestClient(app, raise_server_exceptions=False)
         response = no_raise_client.get("/tree")
     finally:
-        app.dependency_overrides.pop(get_tree, None)
+        app.dependency_overrides.pop(get_tree_for_reading, None)
 
     assert response.status_code == 500
     body = response.json()

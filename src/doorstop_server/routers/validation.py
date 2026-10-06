@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from doorstop_server.deps import get_tree, load_items
+from doorstop_server.deps import get_tree_for_reading, load_items
 from doorstop_server.schemas import ValidationIssue, ValidationResponse
 from doorstop_server.validation_rules import collect_issues
 
@@ -8,7 +8,7 @@ router = APIRouter()
 
 
 @router.get("/validate", response_model=ValidationResponse)
-async def validate_tree(tree=Depends(get_tree)) -> ValidationResponse:
+async def validate_tree(tree=Depends(get_tree_for_reading)) -> ValidationResponse:
     """Every issue Doorstop reports for the whole tree.
 
     Read-only: ``collect_issues`` runs under a settings scope that disables the

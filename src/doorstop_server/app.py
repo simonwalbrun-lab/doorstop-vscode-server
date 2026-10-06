@@ -17,6 +17,8 @@ from doorstop_server.routers import (
 def create_app(settings: Settings) -> FastAPI:
     app = FastAPI(title="doorstop-vscode-server")
     app.state.settings = settings
+    # Shared by read-only requests (deps.get_tree_for_reading).
+    app.state.tree_fingerprint = None
 
     app.add_middleware(SerializeRequestsMiddleware)
     register_exception_handlers(app)

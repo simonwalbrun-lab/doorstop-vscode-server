@@ -12,19 +12,15 @@ stages: ContextVar[Optional[dict]] = ContextVar("timing_stages", default=None)
 STAGE_NAMES = ("wait", "load", "work")
 
 
-def record(stage: str, ms: float) -> None:
-    current = stages.get()
-    if current is not None:
-        current[stage] = current.get(stage, 0.0) + ms
-
-
 @contextmanager
 def timed(stage: str) -> Iterator[None]:
     started = time.perf_counter()
     try:
         yield
     finally:
-        record(stage, (time.perf_counter() - started) * 1000)
+        current = stages.get()
+        if current is not None:
+            current[stage] += (time.perf_counter() - started) * 1000
 
 
 def header_value(current: dict, route: str) -> bytes:

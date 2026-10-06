@@ -21,7 +21,7 @@ import yaml
 from doorstop.core.types import Level
 from fastapi import APIRouter, Depends
 
-from doorstop_server.deps import get_tree, load_items
+from doorstop_server.deps import get_tree_for_reading, load_items
 from doorstop_server.errors import DoorstopApiError
 from doorstop_server.schemas import FilterItem, FilterRequest, FilterResponse
 
@@ -237,7 +237,7 @@ def compile_filter(query: str) -> Tuple[Predicate, Optional[List[str]]]:
 
 
 @router.post("/filter", response_model=FilterResponse)
-async def filter_items(body: FilterRequest, tree=Depends(get_tree)) -> FilterResponse:
+async def filter_items(body: FilterRequest, tree=Depends(get_tree_for_reading)) -> FilterResponse:
     predicate, columns = compile_filter(body.query)
     default_columns = columns is None
     columns = DEFAULT_COLUMNS if columns is None else columns
