@@ -95,6 +95,9 @@ class PublishRequest(BaseModel):
     destinationPath: str
     # Name of a template in the document's ``template`` folder (spec 020 US3).
     template: Optional[str] = None
+    # Borrow another document's ``template`` folder for the duration of the
+    # request when this document has none (spec 024 US1).
+    sharedTemplate: bool = False
 
 
 class PublishResponse(BaseModel):

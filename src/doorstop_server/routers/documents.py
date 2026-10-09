@@ -1,5 +1,7 @@
+from contextlib import contextmanager
 from pathlib import Path
 
+from doorstop.common import copy_dir_contents, delete
 from doorstop.core import exporter, importer, publisher
 from fastapi import APIRouter, Depends
 
@@ -22,6 +24,7 @@ from doorstop_server.schemas import (
 )
 
 router = APIRouter(prefix="/documents")
+publish_all_router = APIRouter()
 
 _EXPORT_EXTENSIONS = {"yaml": ".yml", "csv": ".csv", "tsv": ".tsv", "xlsx": ".xlsx"}
 _PUBLISH_EXTENSIONS = {"markdown": ".md", "html": ".html", "latex": ".tex"}
@@ -152,9 +155,41 @@ async def export_document(prefix: str, body: ExportRequest, tree=Depends(get_tre
     return ExportResponse(path=_resolve_written_path(path, body.destinationPath))
 
 
+@contextmanager
+def _borrowed_template(tree, document, body: PublishRequest):
+    """Gives ``document`` another document's ``template`` folder for one publish.
+
+    Doorstop only looks for ``<document>/template``, so a template kept next to
+    one document is invisible to the others (spec 024). The copy is removed
+    again whatever happens, and a folder that was already there is never touched.
+    """
+    needed = body.sharedTemplate and body.template and body.format != "markdown" and document.template is None
+    owner = next((d for d in tree.documents if d.template), None) if needed else None
+    if owner is None:
+        yield
+        return
+    target = Path(document.path) / "template"
+    target.mkdir()
+    try:
+        copy_dir_contents(owner.template, str(target))
+        yield
+    finally:
+        delete(str(target))
+
+
 @router.post("/{prefix}/publish", response_model=PublishResponse)
 async def publish_document(prefix: str, body: PublishRequest, tree=Depends(get_tree)) -> PublishResponse:
     document = tree.find_document(prefix)
     ext = _PUBLISH_EXTENSIONS[body.format]
-    path = publisher.publish(document, body.destinationPath, ext=ext, template=body.template)
+    with _borrowed_template(tree, document, body):
+        path = publisher.publish(document, body.destinationPath, ext=ext, template=body.template)
     return PublishResponse(path=_resolve_written_path(path, body.destinationPath))
+
+
+@publish_all_router.post("/publish", response_model=PublishResponse)
+async def publish_tree(body: PublishRequest, tree=Depends(get_tree)) -> PublishResponse:
+    """Doorstop's own tree publish: every document in one run (spec 024 US2)."""
+    ext = _PUBLISH_EXTENSIONS[body.format]
+    path = publisher.publish(tree, body.destinationPath, ext=ext, template=body.template)
+    index = Path(path) / "index.html"
+    return PublishResponse(path=str(index) if index.exists() else path)

@@ -25,6 +25,7 @@ def create_app(settings: Settings) -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(documents.router)
+    app.include_router(documents.publish_all_router)
     app.include_router(items.router)
     app.include_router(review.router)
     app.include_router(tree.router)

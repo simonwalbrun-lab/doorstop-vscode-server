@@ -1,4 +1,8 @@
+import shutil
 from pathlib import Path
+
+import doorstop.core as doorstop_core
+import pytest
 
 from .conftest import set_item_attributes, tree_items
 
@@ -191,6 +195,125 @@ def test_publish_with_missing_template_is_a_doorstop_error(client, document, tmp
             "template": "custom",
         },
     )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "DOORSTOP_ERROR"
+
+
+# --- spec 024: shared template and combined publish ---
+
+
+@pytest.fixture
+def two_documents(client, document, project_root):
+    """REQ owns a template folder (a copy of Doorstop's built-in HTML one); SYS does not."""
+    sys_path = project_root / "reqs" / "SYS"
+    response = client.post(
+        "/documents", json={"prefix": "SYS", "path": str(sys_path), "parentPrefix": "REQ"}
+    )
+    assert response.status_code == 200, response.text
+    for prefix in ("REQ", "SYS"):
+        client.post(f"/documents/{prefix}/items", json={})
+    builtin = Path(doorstop_core.__file__).parent / "files" / "templates" / "html"
+    shutil.copytree(builtin, project_root / "reqs" / "REQ" / "template")
+    return project_root / "reqs"
+
+
+def _publish(client, prefix, tmp_path, **extra):
+    return client.post(
+        f"/documents/{prefix}/publish",
+        json={"format": "html", "destinationPath": str(tmp_path / "out" / f"{prefix}.html"), **extra},
+    )
+
+
+def test_publish_with_shared_template_borrows_and_removes_it(client, two_documents, tmp_path):
+    response = _publish(client, "SYS", tmp_path, template="doorstop", sharedTemplate=True)
+
+    assert response.status_code == 200, response.text
+    assert Path(response.json()["path"]).exists()
+    assert not (two_documents / "SYS" / "template").exists()
+    assert (two_documents / "REQ" / "template").is_dir()
+
+
+def test_publish_without_shared_template_flag_still_fails(client, two_documents, tmp_path):
+    response = _publish(client, "SYS", tmp_path, template="doorstop")
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "DOORSTOP_ERROR"
+
+
+def test_shared_template_leaves_a_documents_own_template_alone(client, two_documents, tmp_path):
+    before = sorted(p.name for p in (two_documents / "REQ" / "template").rglob("*"))
+
+    response = _publish(client, "REQ", tmp_path, template="doorstop", sharedTemplate=True)
+
+    assert response.status_code == 200, response.text
+    assert sorted(p.name for p in (two_documents / "REQ" / "template").rglob("*")) == before
+
+
+def test_shared_template_is_not_borrowed_for_markdown(client, two_documents, tmp_path):
+    response = client.post(
+        "/documents/SYS/publish",
+        json={
+            "format": "markdown",
+            "destinationPath": str(tmp_path / "SYS.md"),
+            "template": "doorstop",
+            "sharedTemplate": True,
+        },
+    )
+
+    # Doorstop itself rejects a template for Markdown (the extension never sends
+    # one); what matters here is that nothing was borrowed.
+    assert response.status_code == 400
+    assert not (two_documents / "SYS" / "template").exists()
+
+
+def test_shared_template_without_any_owner_is_a_doorstop_error(client, document, tmp_path, project_root):
+    response = _publish(client, "REQ", tmp_path, template="doorstop", sharedTemplate=True)
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "DOORSTOP_ERROR"
+    assert not (project_root / "reqs" / "REQ" / "template").exists()
+
+
+def test_shared_template_is_removed_when_publish_fails(client, two_documents, tmp_path):
+    # An unknown template name makes Doorstop fail after the folder was borrowed.
+    response = _publish(client, "SYS", tmp_path, template="no-such-template", sharedTemplate=True, format="latex")
+
+    assert response.status_code == 400
+    assert not (two_documents / "SYS" / "template").exists()
+
+
+def test_combined_publish_markdown_writes_every_document(client, two_documents, tmp_path):
+    response = client.post("/publish", json={"format": "markdown", "destinationPath": str(tmp_path / "all")})
+
+    assert response.status_code == 200, response.text
+    assert (tmp_path / "all" / "REQ.md").exists()
+    assert (tmp_path / "all" / "SYS.md").exists()
+
+
+def test_combined_publish_html_reports_the_index(client, two_documents, tmp_path):
+    response = client.post(
+        "/publish", json={"format": "html", "destinationPath": str(tmp_path / "all"), "template": "doorstop"}
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["path"].endswith("index.html")
+    assert Path(response.json()["path"]).exists()
+
+
+def test_combined_publish_with_two_templates_is_a_doorstop_error(client, two_documents, tmp_path):
+    shutil.copytree(two_documents / "REQ" / "template", two_documents / "SYS" / "template")
+
+    response = client.post(
+        "/publish", json={"format": "html", "destinationPath": str(tmp_path / "all"), "template": "doorstop"}
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "DOORSTOP_ERROR"
+
+
+def test_combined_publish_of_an_empty_project_is_a_doorstop_error(client, tmp_path):
+    response = client.post("/publish", json={"format": "markdown", "destinationPath": str(tmp_path / "all")})
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "DOORSTOP_ERROR"
