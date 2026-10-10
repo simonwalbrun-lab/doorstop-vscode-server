@@ -322,6 +322,7 @@ def test_combined_publish_of_an_empty_project_is_a_doorstop_error(client, tmp_pa
 # --- spec 019: POST /documents/{prefix}/items with after / header / text ---
 
 
+# Spec 019 FR-031 FR-031a
 def test_add_item_after_sibling(client, document):
     prefix = document["prefix"]
     a = client.post(f"/documents/{prefix}/items", json={"level": "1.1"}).json()
@@ -343,6 +344,7 @@ def test_add_item_after_sibling(client, document):
     assert items[c["uid"]]["level"] == "1.4"
 
 
+# Spec 019 FR-031a
 def test_add_item_after_heading_item(client, document, project_root):
     prefix = document["prefix"]
     heading = client.post(f"/documents/{prefix}/items", json={"level": "1.0"}).json()
@@ -357,6 +359,7 @@ def test_add_item_after_heading_item(client, document, project_root):
     assert items[child["uid"]]["level"] == "1.2"
 
 
+# Spec 019 FR-031
 def test_add_item_after_and_level_returns_422(client, document):
     prefix = document["prefix"]
     a = client.post(f"/documents/{prefix}/items", json={}).json()
@@ -367,6 +370,7 @@ def test_add_item_after_and_level_returns_422(client, document):
     assert response.json()["error"]["code"] == "INVALID_REQUEST"
 
 
+# Spec 019 FR-031
 def test_add_item_after_foreign_item_returns_400(client, document, project_root):
     req_item = client.post(f"/documents/{document['prefix']}/items", json={}).json()
     client.post(
@@ -385,6 +389,7 @@ def test_add_item_after_foreign_item_returns_400(client, document, project_root)
     assert tree_items(client, "SYS") == []
 
 
+# Spec 019 FR-031
 def test_add_item_after_unknown_item_returns_400(client, document):
     response = client.post(f"/documents/{document['prefix']}/items", json={"after": "REQ-999"})
 
@@ -392,6 +397,7 @@ def test_add_item_after_unknown_item_returns_400(client, document):
     assert response.json()["error"]["code"] == "DOORSTOP_ERROR"
 
 
+# Spec 019 FR-031
 def test_add_item_with_header_and_text_only(client, document):
     response = client.post(
         f"/documents/{document['prefix']}/items", json={"header": "Only", "text": "Prose"}
@@ -406,6 +412,7 @@ def test_add_item_with_header_and_text_only(client, document):
     assert node["text"] == "Prose"
 
 
+# Spec 019 FR-031 FR-031a
 def test_add_item_first_in_a_document_with_items(client, document):
     prefix = document["prefix"]
     a = client.post(f"/documents/{prefix}/items", json={"level": "1.1"}).json()
@@ -427,6 +434,7 @@ def test_add_item_first_in_a_document_with_items(client, document):
     assert levels[b["uid"]] == "1.3"
 
 
+# Spec 019 FR-031
 def test_add_item_first_before_a_heading_level(client, document):
     prefix = document["prefix"]
     a = client.post(f"/documents/{prefix}/items", json={"level": "1.0"}).json()
@@ -443,6 +451,7 @@ def test_add_item_first_before_a_heading_level(client, document):
     assert levels[b["uid"]] == "2.1"
 
 
+# Spec 019 FR-031
 def test_add_item_first_in_an_empty_document(client, document):
     response = client.post(f"/documents/{document['prefix']}/items", json={"first": True})
 
@@ -451,6 +460,7 @@ def test_add_item_first_in_an_empty_document(client, document):
     assert len(tree_items(client, document["prefix"])) == 1
 
 
+# Spec 019 FR-031
 def test_add_item_first_and_after_returns_422(client, document):
     prefix = document["prefix"]
     a = client.post(f"/documents/{prefix}/items", json={}).json()
@@ -461,6 +471,7 @@ def test_add_item_first_and_after_returns_422(client, document):
     assert response.json()["error"]["code"] == "INVALID_REQUEST"
 
 
+# Spec 019 FR-031
 def test_add_item_first_and_level_returns_422(client, document):
     response = client.post(
         f"/documents/{document['prefix']}/items", json={"first": True, "level": "1.1"}
