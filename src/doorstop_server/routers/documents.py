@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 
 from doorstop_server.deps import get_tree
 from doorstop_server.errors import DoorstopApiError
+from doorstop_server.publish import publish_options
 from doorstop_server.routers.items import apply_prose
 from doorstop_server.schemas import (
     AddItemRequest,
@@ -181,7 +182,7 @@ def _borrowed_template(tree, document, body: PublishRequest):
 async def publish_document(prefix: str, body: PublishRequest, tree=Depends(get_tree)) -> PublishResponse:
     document = tree.find_document(prefix)
     ext = _PUBLISH_EXTENSIONS[body.format]
-    with _borrowed_template(tree, document, body):
+    with _borrowed_template(tree, document, body), publish_options(body.traceability, body.childLinks):
         path = publisher.publish(document, body.destinationPath, ext=ext, template=body.template)
     return PublishResponse(path=_resolve_written_path(path, body.destinationPath))
 
@@ -190,6 +191,7 @@ async def publish_document(prefix: str, body: PublishRequest, tree=Depends(get_t
 async def publish_tree(body: PublishRequest, tree=Depends(get_tree)) -> PublishResponse:
     """Doorstop's own tree publish: every document in one run (spec 024 US2)."""
     ext = _PUBLISH_EXTENSIONS[body.format]
-    path = publisher.publish(tree, body.destinationPath, ext=ext, template=body.template)
+    with publish_options(body.traceability, body.childLinks):
+        path = publisher.publish(tree, body.destinationPath, ext=ext, template=body.template)
     index = Path(path) / "index.html"
     return PublishResponse(path=str(index) if index.exists() else path)

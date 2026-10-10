@@ -98,6 +98,10 @@ class PublishRequest(BaseModel):
     # Borrow another document's ``template`` folder for the duration of the
     # request when this document has none (spec 024 US1).
     sharedTemplate: bool = False
+    # Traceability matrix: every declared link, or exactly Doorstop's (spec 028 FR-011).
+    traceability: Literal["complete", "doorstop"] = "complete"
+    # False = Doorstop's --no-child-links (spec 028 FR-012).
+    childLinks: bool = True
 
 
 class PublishResponse(BaseModel):
