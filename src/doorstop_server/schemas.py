@@ -1,4 +1,4 @@
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -40,6 +40,8 @@ class UpdateItemRequest(BaseModel):
 
     header: Optional[str] = None
     text: Optional[str] = None
+    # Extended header attributes (spec 030); protected names are rejected by the route.
+    fields: Optional[Dict[str, str]] = None
 
 
 class ItemResponse(BaseModel):
@@ -126,6 +128,8 @@ class ItemNode(BaseModel):
     reviewed: bool
     cleared: bool
     links: List[LinkInfo]
+    # Only the attributes requested with GET /tree?fields=... that the item has (spec 030).
+    fields: Optional[Dict[str, str]] = None
 
 
 class DocumentNode(BaseModel):
