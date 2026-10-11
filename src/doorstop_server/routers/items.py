@@ -7,26 +7,49 @@ from doorstop_server.schemas import ItemResponse, LinkRequest, LinkResponse, Upd
 router = APIRouter(prefix="/items")
 
 
-def apply_prose(item, header, text) -> None:
-    """Set header and/or text through Doorstop's own setters with a single save.
+# Attributes a document view never edits as fields (spec 030): identity, level,
+# the flags and review state have their own commands, header/text their own lines.
+PROTECTED_FIELDS = frozenset(
+    {"uid", "level", "active", "normative", "derived", "reviewed", "cleared", "links", "header", "text"}
+)
 
-    ``auto`` is switched off so two assignments do not rewrite the file twice;
-    Doorstop's ``save()`` handles both the YAML and the markdown item format.
+
+def is_protected_field(item, name: str) -> bool:
+    """True for names that are not plain header fields of ``item``.
+
+    ``Item.set`` assigns to real attributes, so a name like ``save`` or
+    ``document`` would overwrite a method or property. Only ``ref`` is an
+    attribute that is an editable field.
+    """
+    return name in PROTECTED_FIELDS or (name != "ref" and hasattr(item, name))
+
+
+def apply_prose(item, header, text, fields=None) -> None:
+    """Set header, text and/or extended fields through Doorstop's own setters with a single save.
+
+    ``auto`` is switched off so several assignments do not rewrite the file
+    repeatedly; Doorstop's ``save()`` handles both the YAML and the markdown
+    item format.
     """
     item.auto = False
     if header is not None:
         item.header = header
     if text is not None:
         item.text = text
+    for name, value in (fields or {}).items():
+        item.set(name, value)
     item.save()
 
 
 @router.patch("/{uid}", response_model=ItemResponse)
 async def update_item(uid: str, body: UpdateItemRequest, tree=Depends(get_tree)) -> ItemResponse:
-    if body.header is None and body.text is None:
-        raise DoorstopApiError(422, "INVALID_REQUEST", "header or text is required")
+    if body.header is None and body.text is None and not body.fields:
+        raise DoorstopApiError(422, "INVALID_REQUEST", "header, text or fields is required")
     item = tree.find_item(uid)
-    apply_prose(item, body.header, body.text)
+    for name in body.fields or {}:
+        if is_protected_field(item, name):
+            raise DoorstopApiError(422, "PROTECTED_FIELD", f"{name} cannot be edited here")
+    apply_prose(item, body.header, body.text, body.fields)
     return ItemResponse(uid=str(item.uid), path=item.path, level=str(item.level))
 
 
