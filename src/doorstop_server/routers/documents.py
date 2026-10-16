@@ -1,11 +1,12 @@
 from contextlib import contextmanager
 from pathlib import Path
 
-from doorstop.common import copy_dir_contents, delete
+from doorstop.common import DoorstopError, copy_dir_contents, delete
 from doorstop.core import exporter, importer, publisher
-from fastapi import APIRouter, Depends
+from doorstop.core.document import Document
+from fastapi import APIRouter, Depends, Request
 
-from doorstop_server.deps import get_tree
+from doorstop_server.deps import get_settings, get_tree
 from doorstop_server.errors import DoorstopApiError
 from doorstop_server.publish import publish_options
 from doorstop_server.routers.items import apply_prose
@@ -22,6 +23,8 @@ from doorstop_server.schemas import (
     ReorderIndexResponse,
     ReorderRequest,
     ReorderResponse,
+    SkipDocumentRequest,
+    SkipDocumentResponse,
 )
 
 router = APIRouter(prefix="/documents")
@@ -42,6 +45,52 @@ async def create_document(body: CreateDocumentRequest, tree=Depends(get_tree)) -
         itemformat=body.itemFormat,
     )
     return DocumentResponse(prefix=str(document.prefix), path=document.path)
+
+
+@router.post("/skip", response_model=SkipDocumentResponse)
+async def skip_document(body: SkipDocumentRequest, request: Request, tree=Depends(get_tree)) -> SkipDocumentResponse:
+    """Creates or removes the document's ``.doorstop.skip`` (spec 031); idempotent.
+
+    Addressed by the marker path because a skipped document is not in the tree,
+    so it has no prefix to look up.
+    """
+    root = Path(get_settings(request).project_root).resolve()
+    folder = Path(body.markerPath).parent
+    document = None
+    if root == folder.resolve() or root in folder.resolve().parents:
+        try:
+            document = Document(str(folder), str(root), tree=None)
+        except DoorstopError:
+            pass
+    if document is None:
+        raise DoorstopApiError(404, "DOCUMENT_NOT_FOUND", f"{body.markerPath} is not a Doorstop document of this project")
+    # Doorstop cannot build a tree in which a document's parent is missing, so
+    # skipping a document skips its whole branch, and a document can only be
+    # enabled again once its parent is.
+    prefix = str(document.prefix)
+    folders = [folder]
+    if body.skip:
+        branch = {prefix}
+        grown = True
+        while grown:  # parents precede children only by chance, so repeat until nothing new joins
+            members = [d for d in tree if str(d.prefix) not in branch and d.parent in branch]
+            branch.update(str(d.prefix) for d in members)
+            folders.extend(Path(d.path) for d in members)
+            grown = bool(members)
+    elif document.parent and all(str(d.prefix) != document.parent for d in tree):
+        raise DoorstopApiError(
+            409, "PARENT_DISABLED", f"The parent document {document.parent} of {prefix} is disabled; enable it first"
+        )
+    affected = []
+    for target in folders:
+        marker = target / Document.SKIP
+        if body.skip and not marker.exists():
+            marker.touch()
+            affected.append(str(target / ".doorstop.yml"))
+        elif not body.skip and marker.exists():
+            marker.unlink()
+            affected.append(str(target / ".doorstop.yml"))
+    return SkipDocumentResponse(markerPath=body.markerPath, skipped=body.skip, affected=affected)
 
 
 def _level_after(anchor):

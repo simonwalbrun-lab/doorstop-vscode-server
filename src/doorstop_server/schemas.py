@@ -142,8 +142,25 @@ class DocumentNode(BaseModel):
     items: List[ItemNode]
 
 
+class SkippedDocument(BaseModel):
+    prefix: str
+    markerPath: str
+
+
 class TreeResponse(BaseModel):
     documents: List[DocumentNode]
+    skippedDocuments: List[SkippedDocument] = []
+
+
+class SkipDocumentRequest(BaseModel):
+    markerPath: str
+    skip: bool
+
+
+class SkipDocumentResponse(BaseModel):
+    markerPath: str
+    skipped: bool
+    affected: List[str] = []
 
 
 FieldAnchor = Literal[

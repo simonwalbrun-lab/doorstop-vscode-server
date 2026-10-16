@@ -1,6 +1,8 @@
 import os
 
 import doorstop
+from doorstop.common import DoorstopError
+from doorstop.core.document import Document
 
 from doorstop_server.config import Settings
 
@@ -47,3 +49,21 @@ def fingerprint(root: str) -> dict:
                     continue  # deleted while scanning; the next scan sees that as a change
                 files[path] = (stat.st_mtime_ns, stat.st_size)
     return files
+
+
+def find_skipped_documents(root: str) -> list[tuple[str, str]]:
+    """(prefix, marker path) of every document Doorstop skips because of its ``.doorstop.skip``.
+
+    ``doorstop.build`` drops those documents, so the tree cannot list them; the
+    extension needs them to offer "enable".
+    """
+    found = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [name for name in dirnames if name not in _EXCLUDED_DIRS]
+        if Document.SKIP in filenames:
+            try:
+                document = Document(dirpath, root, tree=None)
+            except DoorstopError:
+                continue  # a stray skip file without a document
+            found.append((str(document.prefix), document.config))
+    return sorted(found)

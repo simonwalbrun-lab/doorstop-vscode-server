@@ -1,11 +1,12 @@
 from typing import Optional
 
 from doorstop.common import DoorstopError
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
-from doorstop_server.deps import get_tree_for_reading, load_items
+from doorstop_server.deps import get_settings, get_tree_for_reading, load_items
+from doorstop_server.doorstop_tree import find_skipped_documents
 from doorstop_server.routers.items import is_protected_field
-from doorstop_server.schemas import DocumentNode, ItemNode, LinkInfo, TreeResponse
+from doorstop_server.schemas import DocumentNode, ItemNode, LinkInfo, SkippedDocument, TreeResponse
 
 router = APIRouter()
 
@@ -39,6 +40,7 @@ def _item_fields(item, names: list[str]) -> Optional[dict[str, str]]:
 
 @router.get("/tree", response_model=TreeResponse)
 async def get_tree_structure(
+    request: Request,
     fields: Optional[str] = Query(default=None, description="Comma-separated header fields to include"),
     tree=Depends(get_tree_for_reading),
 ) -> TreeResponse:
@@ -75,4 +77,8 @@ async def get_tree_structure(
         )
         for document in tree
     ]
-    return TreeResponse(documents=documents)
+    skipped = [
+        SkippedDocument(prefix=prefix, markerPath=marker)
+        for prefix, marker in find_skipped_documents(get_settings(request).project_root)
+    ]
+    return TreeResponse(documents=documents, skippedDocuments=skipped)
