@@ -170,15 +170,22 @@ def test_inactive_parent_link_is_reported_as_unknown_item_error(client, linked_i
     """The spec asks for "parent link is an inactive item ⇒ ERROR". Doorstop 3.2
     has no such check, but `tree.find_item()` skips inactive items, so the link
     surfaces as `linked to unknown item` - already at error severity, satisfying
-    the spec's intent with no severity override of our own (research.md 2b)."""
+    the spec's intent with no severity override of our own (research.md 2b).
+    Doorstop develop (3.3) finds the inactive item and reports it as info; its
+    own severity is kept either way."""
     parent, child = linked_items
 
     tree = build_tree(project_root)
     tree.find_item(parent["uid"]).active = False
 
-    issue = only(issues_for(client), "linked_to_unknown_item")
+    issues = issues_for(client)
+    if find(issues, "linked_to_inactive_item"):
+        issue, severity = only(issues, "linked_to_inactive_item"), "info"
+    else:
+        issue, severity = only(issues, "linked_to_unknown_item"), "error"
 
-    assert issue["severity"] == "error"
+    assert issue["severity"] == severity
+    assert issue["field"] == "link_entry"
     assert issue["relatedUid"] == parent["uid"]
     assert issue["uids"] == [child["uid"]]
 
@@ -385,6 +392,16 @@ def test_classify_recognises_the_unexpected_parent_prefix_info():
     assert record.field == "link_entry"
     assert record.related_uid == "ARCH-001"
     assert record.uids == ["MD-002"]
+
+
+def test_classify_recognises_doorstop_develops_linked_to_inactive_item():
+    record = classify("linked to inactive item: REQ-001", "SYS", "info", "SYS-001")
+
+    assert record.check == "linked_to_inactive_item"
+    assert record.severity == "info", "Doorstop's own severity, never overridden"
+    assert record.field == "link_entry"
+    assert record.related_uid == "REQ-001"
+    assert record.uids == ["SYS-001"]
 
 
 def test_classify_falls_back_to_unknown_with_no_field():

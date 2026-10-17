@@ -176,6 +176,15 @@ def test_target_markdown_page_lists_cross_document_child(client, xlink, tmp_path
 
 
 # Spec 028 FR-005
+def test_child_link_written_in_another_case_or_padding_is_listed(client, xlink, tmp_path):
+    # Doorstop's UID equality ignores case and zero padding: req2 is REQ002.
+    set_item_attributes(xlink, "TST001", links=["sys001", "SYS2", "req0002"])
+    out = publish_all(client, tmp_path / "out")
+    assert "TST001" in line_with(page(out, "REQ"), "Child links", after='id="REQ002"')
+    assert "TST001" in line_with(page(out, "SYS"), "Child links", after='id="SYS002"')
+
+
+# Spec 028 FR-005
 def test_child_links_are_listed_by_uid_whatever_order_the_items_were_loaded_in(client, xlink, tmp_path):
     # On Linux os.walk returns files unsorted, so a tree can hold SYS002 before
     # SYS001; the shared tree also keeps creation order. Neither may leak out.

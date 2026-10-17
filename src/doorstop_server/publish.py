@@ -71,6 +71,15 @@ def _complete_traceability(self):
     return sorted(rows, key=by_uid)
 
 
+def _uid_key(uid):
+    """Keys UIDs the way ``UID.__eq__`` compares them (``REQ1`` == ``req001``).
+
+    ``UID.__hash__`` is case-sensitive while ``__eq__`` is not, so a plain UID key
+    misses case differences; Doorstop develop's tree uses the same key.
+    """
+    return str(uid.prefix).lower(), uid.number, uid.name
+
+
 @contextmanager
 def publish_options(matrix: str = "complete", child_links: bool = True):
     """Child links tree-wide; matrix "complete" or Doorstop's own; Doorstop's --no-child-links.
@@ -82,7 +91,7 @@ def publish_options(matrix: str = "complete", child_links: bool = True):
     index = {}
     built = False
 
-    def tree_wide_children(self, document=None, tree=None, find_all=True):
+    def tree_wide_children(self, document=None, tree=None, find_all=True, full=None):
         nonlocal built
         # The child documents directly: Doorstop's own lookup scans their items
         # for every item published, quadratic on large trees (spec 032 profiling).
@@ -94,13 +103,13 @@ def publish_options(matrix: str = "complete", child_links: bool = True):
         if not built:
             for document2 in tree or self.tree:
                 for item2 in document2:
-                    for uid in item2.links:
-                        index.setdefault(str(uid), []).append(item2 if item2.active else UnknownItem(item2.uid))
+                    for key in {_uid_key(uid) for uid in item2.links}:  # REQ1 + req001: one child
+                        index.setdefault(key, []).append(item2 if item2.active else UnknownItem(item2.uid))
             built = True
         # By UID, not in load order: Doorstop's order is the order os.walk read the
         # files (sorted on Windows/macOS, arbitrary on Linux), and the shared tree
         # keeps items in creation order, so the CLI and the API would differ.
-        return sorted(index.get(str(self.uid), []), key=lambda child: child.uid), documents
+        return sorted(index.get(_uid_key(self.uid), []), key=lambda child: child.uid), documents
 
     def doorstop_traceability(self):
         # Doorstop's own matrix must not see the tree-wide child lookup.

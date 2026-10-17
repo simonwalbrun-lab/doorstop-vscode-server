@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from doorstop.common import DoorstopError, copy_dir_contents, delete
-from doorstop.core import exporter, importer, publisher
+from doorstop.core import exporter, importer, publisher, template as doorstop_template
 from doorstop.core.document import Document
 from fastapi import APIRouter, Depends, Request
 
@@ -207,6 +207,11 @@ async def export_document(prefix: str, body: ExportRequest, tree=Depends(get_tre
     return ExportResponse(path=_resolve_written_path(path, body.destinationPath))
 
 
+# ponytail: detects Doorstop develop's tree-wide template lookup by its private
+# helper; drop it with the borrowing below once Doorstop 3.2 support ends.
+NATIVE_SHARED_TEMPLATES = hasattr(doorstop_template, "_provides")
+
+
 @contextmanager
 def _borrowed_template(tree, document, body: PublishRequest):
     """Gives ``document`` another document's ``template`` folder for one publish.
@@ -214,8 +219,11 @@ def _borrowed_template(tree, document, body: PublishRequest):
     Doorstop only looks for ``<document>/template``, so a template kept next to
     one document is invisible to the others (spec 024). The copy is removed
     again whatever happens, and a folder that was already there is never touched.
+    Doorstop develop (3.3) searches the whole tree itself and rejects the copy as
+    a duplicate, so nothing is borrowed there.
     """
     needed = body.sharedTemplate and body.template and body.format != "markdown" and document.template is None
+    needed = needed and not NATIVE_SHARED_TEMPLATES
     owner = next((d for d in tree.documents if d.template), None) if needed else None
     if owner is None:
         yield

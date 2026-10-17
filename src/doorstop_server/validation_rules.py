@@ -163,6 +163,13 @@ CHECK_TABLE: List[CheckRule] = [
         re.compile(r"^prefix differs from document \(.*\)$"),
         field=None,
     ),
+    # Doorstop develop (3.3): an inactive parent is no longer "unknown".
+    CheckRule(
+        "linked_to_inactive_item",
+        re.compile(rf"^linked to inactive item: (?P<related>{_UID})$"),
+        field="link_entry",
+        related_uid_group="related",
+    ),
     CheckRule(
         "unexpected_parent_prefix",
         re.compile(rf"^parent is '[^']*', but linked to: (?P<related>{_UID})$"),
@@ -260,8 +267,20 @@ def collect_issues(tree: Tree, item_hook=None) -> Iterator[ValidationRecord]:
     before each item is checked; the validation worker uses it to stop a
     cancelled check (spec 032 research R3).
     """
-    for document in tree:
-        yield from collect_document_issues(document, item_hook)
+    # ponytail: private API. Doorstop develop's child-link index (O(n) instead of
+    # O(n^2)) is only on inside Tree.get_issues, so mirror it here; absent on 3.2.
+    # Drop this once Document.get_issues switches the index on itself.
+    # pylint: disable=protected-access
+    indexed = hasattr(tree, "_child_index_active")
+    if indexed:
+        tree._child_index_active = True
+    try:
+        for document in tree:
+            yield from collect_document_issues(document, item_hook)
+    finally:
+        if indexed:
+            tree._child_index_active = False
+            tree._child_index = None
 
 
 def collect_document_issues(document: Document, item_hook=None) -> List[ValidationRecord]:

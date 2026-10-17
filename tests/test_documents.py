@@ -5,6 +5,8 @@ import doorstop.core as doorstop_core
 import pytest
 from doorstop.core.item import Item
 
+from doorstop_server.routers.documents import NATIVE_SHARED_TEMPLATES
+
 from .conftest import add_document, add_item, set_item_attributes, tree_items
 
 
@@ -206,7 +208,11 @@ def two_documents(client, child_document, project_root):
     for prefix in ("REQ", "SYS"):
         add_item(client, prefix)
     builtin = Path(doorstop_core.__file__).parent / "files" / "templates" / "html"
-    shutil.copytree(builtin, project_root / "reqs" / "REQ" / "template")
+    template = project_root / "reqs" / "REQ" / "template"
+    shutil.copytree(builtin, template)
+    # With its views, as Doorstop copies it: else doorstop.tpl is found only via a
+    # views path an earlier publish left in bottle's global TEMPLATE_PATH.
+    shutil.copytree(Path(doorstop_core.__file__).parents[1] / "views", template / "views")
     return project_root / "reqs"
 
 
@@ -229,6 +235,9 @@ def test_publish_with_shared_template_borrows_and_removes_it(client, two_documen
 def test_publish_without_shared_template_flag_still_fails(client, two_documents, tmp_path):
     response = _publish(client, "SYS", tmp_path, template="doorstop")
 
+    if NATIVE_SHARED_TEMPLATES:  # Doorstop develop finds REQ's template itself
+        assert response.status_code == 200, response.text
+        return
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "DOORSTOP_ERROR"
 
@@ -253,9 +262,9 @@ def test_shared_template_is_not_borrowed_for_markdown(client, two_documents, tmp
         },
     )
 
-    # Doorstop itself rejects a template for Markdown (the extension never sends
-    # one); what matters here is that nothing was borrowed.
-    assert response.status_code == 400
+    # Doorstop 3.2 rejects a template for Markdown, develop ignores it (the
+    # extension never sends one); what matters here is that nothing was borrowed.
+    assert response.status_code == (200 if NATIVE_SHARED_TEMPLATES else 400)
     assert not (two_documents / "SYS" / "template").exists()
 
 
