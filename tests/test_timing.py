@@ -53,13 +53,14 @@ def test_health_never_waits(client):
 
 
 def test_a_queued_request_reports_its_wait(tmp_path: Path, monkeypatch):
-    """Slows the real tree load (Doorstop itself is not mocked) so the second of two
-    concurrent requests deterministically queues behind the first (see lock.py)."""
-    real_load_tree = deps.load_tree
+    """Slows the per-request change check (Doorstop itself is not mocked) so the second
+    of two concurrent requests deterministically queues behind the first (see lock.py).
+    The check, not the tree load: since spec 032 an unchanged tree is not reloaded."""
+    real_fingerprint = deps.fingerprint
 
-    def slow_load_tree(settings):
+    def slow_fingerprint(root):
         time.sleep(0.05)
-        return real_load_tree(settings)
+        return real_fingerprint(root)
 
     settings = Settings(project_root=str(tmp_path), host="127.0.0.1", port=0)
     app = create_app(settings)
@@ -71,7 +72,7 @@ def test_a_queued_request_reports_its_wait(tmp_path: Path, monkeypatch):
                 "/documents", json={"prefix": "REQ", "path": str(tmp_path / "reqs" / "REQ")}
             )
             assert created.status_code == 200
-            monkeypatch.setattr(deps, "load_tree", slow_load_tree)
+            monkeypatch.setattr(deps, "fingerprint", slow_fingerprint)
             responses = await asyncio.gather(
                 *[async_client.post("/documents/REQ/items", json={}) for _ in range(2)]
             )

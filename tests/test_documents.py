@@ -3,6 +3,7 @@ from pathlib import Path
 
 import doorstop.core as doorstop_core
 import pytest
+from doorstop.core.item import Item
 
 from .conftest import set_item_attributes, tree_items
 
@@ -479,3 +480,15 @@ def test_add_item_first_and_level_returns_422(client, document):
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "INVALID_REQUEST"
+
+
+# Spec 032 (profiling): publishing finds child documents directly, never by scanning their items per item.
+def test_combined_publish_does_not_scan_child_documents_per_item(client, two_documents, tmp_path, monkeypatch):
+    calls = []
+    real = Item.find_child_items_and_documents
+    monkeypatch.setattr(Item, "find_child_items_and_documents", lambda self, *a, **k: calls.append(self) or real(self, *a, **k))
+
+    response = client.post("/publish", json={"format": "markdown", "destinationPath": str(tmp_path / "all")})
+
+    assert response.status_code == 200, response.text
+    assert calls == []

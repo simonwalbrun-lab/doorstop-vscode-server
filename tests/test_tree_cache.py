@@ -38,6 +38,7 @@ def test_hand_edit_is_picked_up(client, document, project_root: Path):
     assert item["text"] == "edited by hand outside the server"
 
 
+# Spec 032 FR-022: mutations now share the cached tree; a read after one must still be current.
 def test_change_through_the_server_is_visible_on_the_next_read(client, document):
     first = add_item(client)
     assert [item["uid"] for item in tree_items(client, "REQ")] == [first]

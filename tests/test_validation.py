@@ -94,17 +94,18 @@ def test_validate_leaves_a_suspect_link_suspect(client, document, project_root):
 # --------------------------------------------------------------------------
 
 
-def test_unrecognised_message_is_reported_as_unknown(client, document, monkeypatch):
+def test_unrecognised_message_is_reported_as_unknown(client, document, project_root):
     """A message matching no template must still reach the user, at Doorstop's
-    own severity, with no placement claim (FR-011, SC-007)."""
-    from doorstop.common import DoorstopWarning
-    from doorstop.core.document import Document
+    own severity, with no placement claim (FR-011, SC-007).
 
-    monkeypatch.setattr(
-        Document,
-        "get_issues",
-        lambda self, **kwargs: iter([DoorstopWarning("a message from a future Doorstop")]),
-    )
+    The check runs in the validation worker process (spec 032), so the message is
+    injected through Doorstop's own item hook there rather than a monkeypatch here.
+    """
+    from doorstop_server.validation_worker import Validator
+    from tests import worker_hooks
+
+    client.post(f"/documents/{document['prefix']}/items", json={"text": "some text"})
+    client.app.state.validator = Validator(str(project_root), item_hook=worker_hooks.future_message)
 
     issues = issues_for(client)
 

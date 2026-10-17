@@ -22,7 +22,7 @@ doorstop-vscode-server --project <path-to-doorstop-project-root> --host 127.0.0.
 
 ## API
 
-See `src/doorstop_server/routers/` for the endpoint implementations. `GET /health` is the only route that is not serialized behind the request lock.
+See `src/doorstop_server/routers/` for the endpoint implementations. `GET /health` and `GET /validate` are the only routes not serialized behind the request lock. `/validate` hands the check to a long-lived worker process with its own read-only copy of the tree (`validation_worker.py`, spec 032), so a running check does not slow other requests down.
 
 - `GET /tree` — every document with its items in Doorstop's own order (level, then UID); inactive items included (`routers/tree.py`)
 - `POST /documents/{prefix}/items` — create an item; optional `level`, or `after` (UID of an item of the same document: the new item gets Doorstop's "append after" level and the followers are renumbered), plus `header` / `text` (`routers/documents.py`)

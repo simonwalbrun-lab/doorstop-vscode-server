@@ -44,6 +44,13 @@ async def get_tree_structure(
     fields: Optional[str] = Query(default=None, description="Comma-separated header fields to include"),
     tree=Depends(get_tree_for_reading),
 ) -> TreeResponse:
+    # Unchanged tree, same fields: the last answer is still exact (tree_version
+    # moves on every reload and every mutation), and building it costs ~0.3 s
+    # on 1,500 items. Views ask for the tree often (spec 032 profiling).
+    state = request.app.state
+    cached = state.tree_responses.get(fields or "")
+    if cached and cached[0] == state.tree_version:
+        return cached[1]
     load_items(tree)
     names = [name.strip() for name in (fields or "").split(",") if name.strip()]
     documents = [
@@ -81,4 +88,6 @@ async def get_tree_structure(
         SkippedDocument(prefix=prefix, markerPath=marker)
         for prefix, marker in find_skipped_documents(get_settings(request).project_root)
     ]
-    return TreeResponse(documents=documents, skippedDocuments=skipped)
+    response = TreeResponse(documents=documents, skippedDocuments=skipped)
+    state.tree_responses[fields or ""] = (state.tree_version, response)
+    return response

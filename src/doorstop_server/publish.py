@@ -84,7 +84,10 @@ def publish_options(matrix: str = "complete", child_links: bool = True):
 
     def tree_wide_children(self, document=None, tree=None, find_all=True):
         nonlocal built
-        _, documents = original_children(self, document=document, tree=tree, find_all=False)
+        # The child documents directly: Doorstop's own lookup scans their items
+        # for every item published, quadratic on large trees (spec 032 profiling).
+        document, tree = document or self.document, tree or self.tree
+        documents = [document2 for document2 in tree if document2.parent == document.prefix] if document and tree else []
         # ponytail: index built from the first tree seen; one publish = one tree
         if not built:
             for document2 in tree or self.tree:

@@ -21,8 +21,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field as dataclass_field
 from typing import Iterator, List, Optional, Pattern
 
-from doorstop import settings
+from doorstop import settings, Tree
 from doorstop.common import DoorstopError, DoorstopInfo, DoorstopWarning
+from doorstop.core.document import Document
 
 #: Doorstop settings that make *validation* mutate the repository. Verified
 #: empirically: a plain ``get_issues()`` pass over a copy of
@@ -250,28 +251,40 @@ def classify(message: str, document_prefix: str, severity: str, owner_uid: Optio
     )
 
 
-def collect_issues(tree) -> Iterator[ValidationRecord]:
+def collect_issues(tree: Tree, item_hook=None) -> Iterator[ValidationRecord]:
     """Every issue Doorstop reports for the whole tree, classified.
 
     Iterates documents rather than calling ``Tree.get_issues()`` so the document
     is known from the loop variable and only one prefix layer ever needs
-    stripping. ``Document.get_issues()`` re-wraps item issues as
-    ``"{uid}: {message}"``, and a message arriving *without* such a prefix is
-    exactly the discriminator for a document-level issue (research.md section 3).
+    stripping (research.md section 3). ``item_hook`` is Doorstop's own: it runs
+    before each item is checked; the validation worker uses it to stop a
+    cancelled check (spec 032 research R3).
     """
+    for document in tree:
+        yield from collect_document_issues(document, item_hook)
+
+
+def collect_document_issues(document: Document, item_hook=None) -> List[ValidationRecord]:
+    """Every issue Doorstop reports for one document, classified.
+
+    Runs under the read-only settings scope, so validation never writes a
+    requirement file (spec 032 research R2). ``Document.get_issues()`` re-wraps
+    item issues as ``"{uid}: {message}"``; a message *without* such a prefix is a
+    document-level issue.
+    """
+    prefix = str(document.prefix)
+    records = []
     with read_only_validation():
-        for document in tree:
-            prefix = str(document.prefix)
-            uids_in_document = {str(item.uid) for item in document}
+        uids_in_document = {str(item.uid) for item in document}
+        for issue in document.get_issues(item_hook=item_hook):
+            severity = classify_severity(issue)
+            message = str(issue)
 
-            for issue in document.get_issues():
-                severity = classify_severity(issue)
-                message = str(issue)
+            owner_uid = None
+            head, separator, tail = message.partition(": ")
+            if separator and head in uids_in_document:
+                owner_uid = head
+                message = tail
 
-                owner_uid = None
-                head, separator, tail = message.partition(": ")
-                if separator and head in uids_in_document:
-                    owner_uid = head
-                    message = tail
-
-                yield classify(message, prefix, severity, owner_uid)
+            records.append(classify(message, prefix, severity, owner_uid))
+    return records

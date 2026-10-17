@@ -5,11 +5,11 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from doorstop_server import timing
 
-_UNLOCKED_PATHS = {"/health"}
+_UNLOCKED_PATHS = {"/health", "/validate"}
 
 
 class SerializeRequestsMiddleware:
-    """Ensures the app answers exactly one request at a time (except /health).
+    """Ensures the app answers exactly one request at a time (except /health and /validate).
 
     Implemented as a bare ASGI middleware -- not `@app.middleware("http")`
     (Starlette's BaseHTTPMiddleware) -- because BaseHTTPMiddleware runs the
@@ -26,6 +26,10 @@ class SerializeRequestsMiddleware:
 
     It also reports how long the request waited for the lock, loaded the tree
     and worked, as a Server-Timing header (spec 023, timing.py).
+
+    ``GET /validate`` is background validation: it runs in a separate process on
+    its own copy of the project and never takes this lock (Constitution
+    Principle I v1.6.0, spec 032 R2).
     """
 
     def __init__(self, app: ASGIApp) -> None:
