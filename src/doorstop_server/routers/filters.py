@@ -153,7 +153,7 @@ def _compile_expression(expr: str) -> Predicate:
         literal = _literal(node.comparators[0], expr)
         return lambda item, _index: _compare(op, _value(item, name), literal)
 
-    if (
+    if (  # pylint: disable=too-many-boolean-expressions  # one AST shape, read top to bottom
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
         and isinstance(node.func.value, ast.Name)

@@ -76,7 +76,7 @@ def scenarios(out: Path, docs: int) -> list:
     ]
 
 
-def main() -> None:
+def main() -> None:  # pylint: disable=too-many-locals  # one linear script
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--docs", type=int, default=5, choices=range(1, len(PREFIXES) + 1))
     parser.add_argument("--items", type=int, default=300, help="items per document")
@@ -109,7 +109,8 @@ def main() -> None:
             timings.append((name, elapsed, response.headers.get("server-timing", "")))
             print(f"\n=== {number:02} {name}: {method} {path} {elapsed:.0f} ms -> {target}")
             # Only server and Doorstop frames: the test client's own frames would top every list.
-            pstats.Stats(profile).sort_stats("cumulative").print_stats(r"doorstop_server|site-packages.doorstop", args.top)
+            frames = r"doorstop_server|site-packages.doorstop"
+            pstats.Stats(profile).sort_stats("cumulative").print_stats(frames, args.top)
 
     print("\nScenario            ms      Server-Timing")
     for name, elapsed, server_timing in timings:

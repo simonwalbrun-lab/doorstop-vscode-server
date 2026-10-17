@@ -63,7 +63,9 @@ async def skip_document(body: SkipDocumentRequest, request: Request, tree=Depend
         except DoorstopError:
             pass
     if document is None:
-        raise DoorstopApiError(404, "DOCUMENT_NOT_FOUND", f"{body.markerPath} is not a Doorstop document of this project")
+        raise DoorstopApiError(
+            404, "DOCUMENT_NOT_FOUND", f"{body.markerPath} is not a Doorstop document of this project"
+        )
     # Doorstop cannot build a tree in which a document's parent is missing, so
     # skipping a document skips its whole branch, and a document can only be
     # enabled again once its parent is.

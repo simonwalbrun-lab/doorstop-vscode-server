@@ -1,6 +1,6 @@
 """PATCH /items/{uid} with extended header fields (spec 030)."""
 
-from .conftest import tree_items
+from .conftest import add_document, add_item, tree_items
 
 
 def _fields(client, prefix, uid, names):
@@ -12,7 +12,7 @@ def _fields(client, prefix, uid, names):
 
 def test_patch_fields_persists(client, document):
     # spec 030 FR-015
-    uid = client.post(f"/documents/{document['prefix']}/items", json={}).json()["uid"]
+    uid = add_item(client)["uid"]
 
     response = client.patch(f"/items/{uid}", json={"fields": {"status": "approved", "ref": "a.py"}})
 
@@ -22,7 +22,7 @@ def test_patch_fields_persists(client, document):
 
 def test_patch_fields_together_with_header_and_text(client, document):
     # spec 030 FR-015
-    uid = client.post(f"/documents/{document['prefix']}/items", json={}).json()["uid"]
+    uid = add_item(client)["uid"]
 
     client.patch(f"/items/{uid}", json={"header": "H", "text": "T", "fields": {"status": "x"}})
 
@@ -33,7 +33,7 @@ def test_patch_fields_together_with_header_and_text(client, document):
 
 def test_patch_protected_field_is_rejected_and_writes_nothing(client, document):
     # spec 030 FR-016
-    uid = client.post(f"/documents/{document['prefix']}/items", json={"header": "Keep"}).json()["uid"]
+    uid = add_item(client, header="Keep")["uid"]
 
     for name in ("level", "links", "reviewed", "save", "document"):
         response = client.patch(f"/items/{uid}", json={"header": "Changed", "fields": {name: "x"}})
@@ -45,7 +45,7 @@ def test_patch_protected_field_is_rejected_and_writes_nothing(client, document):
 
 
 def test_patch_without_header_text_or_fields_is_rejected(client, document):
-    uid = client.post(f"/documents/{document['prefix']}/items", json={}).json()["uid"]
+    uid = add_item(client)["uid"]
 
     response = client.patch(f"/items/{uid}", json={})
 
@@ -55,15 +55,11 @@ def test_patch_without_header_text_or_fields_is_rejected(client, document):
 
 def test_fields_round_trip_in_a_markdown_format_document(client, project_root):
     # spec 030 FR-015: the Markdown item format keeps extended attributes too
-    created = client.post(
-        "/documents",
-        json={"prefix": "MD", "path": str(project_root / "md"), "separator": "-", "itemFormat": "markdown"},
-    )
-    assert created.status_code == 200, created.text
-    uid = client.post("/documents/MD/items", json={"text": "Body"}).json()["uid"]
+    add_document(client, project_root, "MD", parent=None, itemFormat="markdown")
+    uid = add_item(client, "MD", text="Body")["uid"]
 
     response = client.patch(f"/items/{uid}", json={"fields": {"status": "approved", "ref": "a.py"}})
 
     assert response.status_code == 200, response.text
-    assert next(project_root.glob("md/*.md")).exists()
+    assert next(project_root.glob("reqs/MD/*.md")).exists()
     assert _fields(client, "MD", uid, ["status", "ref"]) == {"status": "approved", "ref": "a.py"}

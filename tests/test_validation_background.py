@@ -8,7 +8,6 @@ it runs. Real Doorstop projects, no mocks of Doorstop itself (Principle V).
 
 import asyncio
 import os
-import shutil
 import statistics
 import time
 from pathlib import Path
@@ -24,25 +23,20 @@ from doorstop_server.validation_rules import collect_issues
 from doorstop_server.validation_worker import Validator
 
 from tests import worker_hooks
+from tests.conftest import add_document, add_item, build_sample_project, link
 from tests.test_timing import parse_server_timing
-
-REGRESSION = Path(__file__).resolve().parents[2] / "testdata" / "regression"
 ITEMS_PER_DOCUMENT = 5  # with worker_hooks.slow a full check takes 10 x 0.2 s = 2 s
 
 
 @pytest.fixture
 def two_documents(client: TestClient, document: dict, project_root: Path) -> list:
     """REQ plus a child TST, five linked items each; returns the REQ item UIDs."""
-    response = client.post(
-        "/documents",
-        json={"prefix": "TST", "path": str(project_root / "reqs" / "TST"), "parentPrefix": "REQ", "separator": "-"},
-    )
-    assert response.status_code == 200, response.text
+    add_document(client, project_root, "TST")
     uids = []
     for _ in range(ITEMS_PER_DOCUMENT):
-        uid = client.post("/documents/REQ/items", json={"text": "parent"}).json()["uid"]
-        child = client.post("/documents/TST/items", json={"text": "child"}).json()["uid"]
-        client.post(f"/items/{child}/links", json={"parentUid": uid})
+        uid = add_item(client, text="parent")["uid"]
+        child = add_item(client, "TST", text="child")["uid"]
+        link(client, child, uid)
         uids.append(uid)
     return uids
 
@@ -201,7 +195,7 @@ def test_an_outside_edit_during_a_check_cancels_it(client, two_documents, use_ho
     async def scenario(async_client):
         check = asyncio.create_task(async_client.get("/validate"))
         await asyncio.sleep(0.3)  # the worker has fingerprinted the files by now
-        item_file.write_text(item_file.read_text() + "\nnote: edited outside\n")
+        item_file.write_text(item_file.read_text(encoding="utf-8") + "\nnote: edited outside\n", encoding="utf-8")
         return await check
 
     check = run(client.app, scenario)
@@ -211,11 +205,13 @@ def test_an_outside_edit_during_a_check_cancels_it(client, two_documents, use_ho
 
 
 # Spec 032 SC-002
-def test_a_tree_reload_of_a_save_the_check_already_sees_does_not_cancel_it(client, two_documents, use_hook, project_root):
+def test_a_tree_reload_of_a_save_the_check_already_sees_does_not_cancel_it(
+    client, two_documents, use_hook, project_root
+):
     use_hook(worker_hooks.slow)
     client.get("/tree")  # the server's tree is loaded before the save
     item_file = Path(doorstop.build(cwd=str(project_root), root=str(project_root)).find_item(two_documents[0]).path)
-    item_file.write_text(item_file.read_text() + "\nnote: saved in the editor\n")
+    item_file.write_text(item_file.read_text(encoding="utf-8") + "\nnote: saved in the editor\n", encoding="utf-8")
 
     async def scenario(async_client):
         check = asyncio.create_task(async_client.get("/validate"))
@@ -280,8 +276,7 @@ def test_a_crashed_worker_is_replaced_by_the_next_check(client, two_documents):
 
 # Spec 032 FR-006
 def test_background_results_equal_the_whole_tree_validation(tmp_path):
-    shutil.copytree(REGRESSION, tmp_path / "regression")
-    root = tmp_path / "regression"
+    root = build_sample_project(tmp_path)
     app = create_app(Settings(project_root=str(root), host="127.0.0.1", port=0))
     try:
         response = TestClient(app).get("/validate")
@@ -303,4 +298,6 @@ def test_background_results_equal_the_whole_tree_validation(tmp_path):
     ]
     assert response.status_code == 200, response.text
     assert response.json()["issues"] == expected
-    assert expected, "the regression project must report problems for this comparison to mean anything"
+    assert {issue["check"] for issue in expected} >= {"suspect_link", "linked_to_unknown_item", "no_text"}, (
+        "the sample project must report problems for this comparison to mean anything"
+    )

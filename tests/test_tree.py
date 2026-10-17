@@ -2,11 +2,11 @@ from pathlib import Path
 
 import doorstop
 
-from .conftest import set_item_attributes, set_item_text, tree_items
+from .conftest import add_item, set_item_attributes, set_item_text, tree_items
 
 
 def test_tree_reflects_documents_and_items(client, document):
-    item = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    item = add_item(client)
 
     response = client.get("/tree")
 
@@ -24,16 +24,7 @@ def test_tree_reflects_documents_and_items(client, document):
     assert doc["items"][0]["derived"] is False
 
 
-def test_tree_reports_document_parent_relationship(client, document, project_root):
-    client.post(
-        "/documents",
-        json={
-            "prefix": "SYS",
-            "path": str(project_root / "reqs" / "SYS"),
-            "parentPrefix": document["prefix"],
-        },
-    )
-
+def test_tree_reports_document_parent_relationship(client, document, child_document):
     body = client.get("/tree").json()
 
     sys_doc = next(d for d in body["documents"] if d["prefix"] == "SYS")
@@ -42,10 +33,8 @@ def test_tree_reports_document_parent_relationship(client, document, project_roo
     assert req_doc["parentPrefix"] is None
 
 
-def test_tree_link_becomes_suspect_after_parent_content_changes(client, document, project_root):
-    parent = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    child = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    client.post(f"/items/{child['uid']}/links", json={"parentUid": parent["uid"]})
+def test_tree_link_becomes_suspect_after_parent_content_changes(client, linked_items, project_root):
+    parent, child = linked_items
     client.post("/clear", json={"scope": "item", "target": child["uid"]})
 
     cleared_tree = client.get("/tree").json()
@@ -63,10 +52,8 @@ def test_tree_link_becomes_suspect_after_parent_content_changes(client, document
     assert updated_node["links"] == [{"uid": parent["uid"], "suspect": True}]
 
 
-def test_tree_link_to_dangling_parent_is_suspect(client, document):
-    parent = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    child = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    client.post(f"/items/{child['uid']}/links", json={"parentUid": parent["uid"]})
+def test_tree_link_to_dangling_parent_is_suspect(client, linked_items):
+    parent, child = linked_items
     client.post("/clear", json={"scope": "item", "target": child["uid"]})
 
     # Remove the parent item's file directly, leaving a dangling link.
@@ -79,7 +66,7 @@ def test_tree_link_to_dangling_parent_is_suspect(client, document):
 def test_tree_reports_item_ref(client, document, project_root):
     """`ref` is part of the item payload so the extension can show it without
     reading and parsing the requirement file itself."""
-    created = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    created = add_item(client)
     tree = doorstop.build(
         cwd=str(project_root), root=str(project_root), request_next_number=None
     )
@@ -94,7 +81,7 @@ def test_tree_reports_item_ref(client, document, project_root):
 
 
 def test_tree_reports_null_ref_when_unset(client, document):
-    created = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    created = add_item(client)
 
     response = client.get("/tree")
 
@@ -106,9 +93,9 @@ def test_tree_reports_null_ref_when_unset(client, document):
 def test_tree_items_are_sorted_by_level(client, document, project_root):
     # spec 019: the document view relies on the server's order, not file-load order.
     prefix = document["prefix"]
-    first = client.post(f"/documents/{prefix}/items", json={}).json()
-    second = client.post(f"/documents/{prefix}/items", json={}).json()
-    third = client.post(f"/documents/{prefix}/items", json={}).json()
+    first = add_item(client, prefix)
+    second = add_item(client, prefix)
+    third = add_item(client, prefix)
     set_item_attributes(project_root, first["uid"], level="2.0")
     set_item_attributes(project_root, second["uid"], level="1.1")
     set_item_attributes(project_root, third["uid"], level="1.0")

@@ -87,7 +87,9 @@ def publish_options(matrix: str = "complete", child_links: bool = True):
         # The child documents directly: Doorstop's own lookup scans their items
         # for every item published, quadratic on large trees (spec 032 profiling).
         document, tree = document or self.document, tree or self.tree
-        documents = [document2 for document2 in tree if document2.parent == document.prefix] if document and tree else []
+        documents = []
+        if document and tree:
+            documents = [document2 for document2 in tree if document2.parent == document.prefix]
         # ponytail: index built from the first tree seen; one publish = one tree
         if not built:
             for document2 in tree or self.tree:
@@ -95,7 +97,10 @@ def publish_options(matrix: str = "complete", child_links: bool = True):
                     for uid in item2.links:
                         index.setdefault(str(uid), []).append(item2 if item2.active else UnknownItem(item2.uid))
             built = True
-        return list(index.get(str(self.uid), [])), documents
+        # By UID, not in load order: Doorstop's order is the order os.walk read the
+        # files (sorted on Windows/macOS, arbitrary on Linux), and the shared tree
+        # keeps items in creation order, so the CLI and the API would differ.
+        return sorted(index.get(str(self.uid), []), key=lambda child: child.uid), documents
 
     def doorstop_traceability(self):
         # Doorstop's own matrix must not see the tree-wide child lookup.
@@ -111,11 +116,15 @@ def publish_options(matrix: str = "complete", child_links: bool = True):
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(
         prog="python -m doorstop_server.publish",
-        description="doorstop publish with complete cross-document links (spec 028); other arguments go to doorstop publish",
+        description=(
+            "doorstop publish with complete cross-document links (spec 028); "
+            "other arguments go to doorstop publish"
+        ),
     )
     parser.add_argument("--traceability", choices=["complete", "doorstop"], default="complete")
     args, rest = parser.parse_known_args(argv)
-    from doorstop.cli.main import main as doorstop_main
+    # Only this command line needs Doorstop's CLI; the server never imports it.
+    from doorstop.cli.main import main as doorstop_main  # pylint: disable=import-outside-toplevel
 
     # --no-child-links is applied by Doorstop's own CLI, inside this context.
     with publish_options(matrix=args.traceability):

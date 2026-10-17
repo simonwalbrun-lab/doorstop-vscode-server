@@ -8,7 +8,7 @@ from doorstop_server import timing
 _UNLOCKED_PATHS = {"/health", "/validate"}
 
 
-class SerializeRequestsMiddleware:
+class SerializeRequestsMiddleware:  # pylint: disable=too-few-public-methods  # an ASGI app is one call
     """Ensures the app answers exactly one request at a time (except /health and /validate).
 
     Implemented as a bare ASGI middleware -- not `@app.middleware("http")`

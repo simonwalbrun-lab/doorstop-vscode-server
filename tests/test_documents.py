@@ -5,7 +5,7 @@ import doorstop.core as doorstop_core
 import pytest
 from doorstop.core.item import Item
 
-from .conftest import set_item_attributes, tree_items
+from .conftest import add_document, add_item, set_item_attributes, tree_items
 
 
 def test_create_document_returns_prefix_and_path(client, project_root):
@@ -68,8 +68,8 @@ def test_add_item_on_unknown_document_returns_400(client):
 
 
 def test_reorder_auto(client, document):
-    client.post(f"/documents/{document['prefix']}/items", json={})
-    client.post(f"/documents/{document['prefix']}/items", json={})
+    add_item(client)
+    add_item(client)
 
     response = client.post(f"/documents/{document['prefix']}/reorder", json={"mode": "auto"})
 
@@ -85,7 +85,7 @@ def test_reorder_manual_without_index_returns_409(client, document):
 
 
 def test_reorder_index_lifecycle(client, document):
-    client.post(f"/documents/{document['prefix']}/items", json={})
+    add_item(client)
 
     ensure = client.post(f"/documents/{document['prefix']}/reorder/index")
     assert ensure.status_code == 200
@@ -116,7 +116,7 @@ def test_reorder_index_discard(client, document):
 
 
 def test_export_then_import_round_trip(client, document, tmp_path):
-    client.post(f"/documents/{document['prefix']}/items", json={})
+    add_item(client)
     export_path = tmp_path / "export.yml"
 
     export_response = client.post(
@@ -129,11 +129,7 @@ def test_export_then_import_round_trip(client, document, tmp_path):
     # Doorstop only allows a single root document (no parentPrefix); every other
     # document needs one -- see test_create_document_with_duplicate_prefix_fails's
     # sibling case in test_create_child_document_with_parent.
-    other_doc_path = tmp_path / "reqs" / "REQ2"
-    client.post(
-        "/documents",
-        json={"prefix": "REQ2", "path": str(other_doc_path), "parentPrefix": document["prefix"]},
-    )
+    add_document(client, tmp_path, "REQ2")
 
     import_response = client.post(
         "/documents/REQ2/import", json={"sourcePath": str(export_path)}
@@ -147,7 +143,7 @@ def test_export_then_import_round_trip(client, document, tmp_path):
 
 
 def test_publish_markdown_writes_to_requested_path(client, document, tmp_path):
-    client.post(f"/documents/{document['prefix']}/items", json={})
+    add_item(client)
     destination = tmp_path / "publish.md"
 
     response = client.post(
@@ -165,7 +161,7 @@ def test_publish_html_nests_under_documents_subfolder(client, document, tmp_path
     <dirname(destination)>/documents/<name>, not to `destination` itself. Pinning
     this documented quirk so a Doorstop upgrade that changes it doesn't silently
     break the extension's "open the published file" flow."""
-    client.post(f"/documents/{document['prefix']}/items", json={})
+    add_item(client)
     destination = tmp_path / "publish.html"
 
     response = client.post(
@@ -186,7 +182,7 @@ def test_publish_html_nests_under_documents_subfolder(client, document, tmp_path
 def test_publish_with_missing_template_is_a_doorstop_error(client, document, tmp_path):
     """Spec 020 US3: a template the document does not have fails as a
     structured Doorstop error, not a crash or a silent default."""
-    client.post(f"/documents/{document['prefix']}/items", json={})
+    add_item(client)
 
     response = client.post(
         f"/documents/{document['prefix']}/publish",
@@ -205,15 +201,10 @@ def test_publish_with_missing_template_is_a_doorstop_error(client, document, tmp
 
 
 @pytest.fixture
-def two_documents(client, document, project_root):
+def two_documents(client, child_document, project_root):
     """REQ owns a template folder (a copy of Doorstop's built-in HTML one); SYS does not."""
-    sys_path = project_root / "reqs" / "SYS"
-    response = client.post(
-        "/documents", json={"prefix": "SYS", "path": str(sys_path), "parentPrefix": "REQ"}
-    )
-    assert response.status_code == 200, response.text
     for prefix in ("REQ", "SYS"):
-        client.post(f"/documents/{prefix}/items", json={})
+        add_item(client, prefix)
     builtin = Path(doorstop_core.__file__).parent / "files" / "templates" / "html"
     shutil.copytree(builtin, project_root / "reqs" / "REQ" / "template")
     return project_root / "reqs"
@@ -326,9 +317,9 @@ def test_combined_publish_of_an_empty_project_is_a_doorstop_error(client, tmp_pa
 # Spec 019 FR-031 FR-031a
 def test_add_item_after_sibling(client, document):
     prefix = document["prefix"]
-    a = client.post(f"/documents/{prefix}/items", json={"level": "1.1"}).json()
-    b = client.post(f"/documents/{prefix}/items", json={"level": "1.2"}).json()
-    c = client.post(f"/documents/{prefix}/items", json={"level": "1.3"}).json()
+    a = add_item(client, prefix, level="1.1")
+    b = add_item(client, prefix, level="1.2")
+    c = add_item(client, prefix, level="1.3")
 
     response = client.post(
         f"/documents/{prefix}/items", json={"after": b["uid"], "header": "New", "text": "Body"}
@@ -348,9 +339,9 @@ def test_add_item_after_sibling(client, document):
 # Spec 019 FR-031a
 def test_add_item_after_heading_item(client, document, project_root):
     prefix = document["prefix"]
-    heading = client.post(f"/documents/{prefix}/items", json={"level": "1.0"}).json()
+    heading = add_item(client, prefix, level="1.0")
     set_item_attributes(project_root, heading["uid"], normative=False)
-    child = client.post(f"/documents/{prefix}/items", json={"level": "1.1"}).json()
+    child = add_item(client, prefix, level="1.1")
 
     response = client.post(f"/documents/{prefix}/items", json={"after": heading["uid"]})
 
@@ -363,7 +354,7 @@ def test_add_item_after_heading_item(client, document, project_root):
 # Spec 019 FR-031
 def test_add_item_after_and_level_returns_422(client, document):
     prefix = document["prefix"]
-    a = client.post(f"/documents/{prefix}/items", json={}).json()
+    a = add_item(client, prefix)
 
     response = client.post(f"/documents/{prefix}/items", json={"after": a["uid"], "level": "2.0"})
 
@@ -372,16 +363,8 @@ def test_add_item_after_and_level_returns_422(client, document):
 
 
 # Spec 019 FR-031
-def test_add_item_after_foreign_item_returns_400(client, document, project_root):
-    req_item = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    client.post(
-        "/documents",
-        json={
-            "prefix": "SYS",
-            "path": str(project_root / "reqs" / "SYS"),
-            "parentPrefix": document["prefix"],
-        },
-    )
+def test_add_item_after_foreign_item_returns_400(client, child_document):
+    req_item = add_item(client)
 
     response = client.post("/documents/SYS/items", json={"after": req_item["uid"]})
 
@@ -416,8 +399,8 @@ def test_add_item_with_header_and_text_only(client, document):
 # Spec 019 FR-031 FR-031a
 def test_add_item_first_in_a_document_with_items(client, document):
     prefix = document["prefix"]
-    a = client.post(f"/documents/{prefix}/items", json={"level": "1.1"}).json()
-    b = client.post(f"/documents/{prefix}/items", json={"level": "1.2"}).json()
+    a = add_item(client, prefix, level="1.1")
+    b = add_item(client, prefix, level="1.2")
 
     response = client.post(
         f"/documents/{prefix}/items", json={"first": True, "header": "Intro", "text": "First."}
@@ -438,8 +421,8 @@ def test_add_item_first_in_a_document_with_items(client, document):
 # Spec 019 FR-031
 def test_add_item_first_before_a_heading_level(client, document):
     prefix = document["prefix"]
-    a = client.post(f"/documents/{prefix}/items", json={"level": "1.0"}).json()
-    b = client.post(f"/documents/{prefix}/items", json={"level": "1.1"}).json()
+    a = add_item(client, prefix, level="1.0")
+    b = add_item(client, prefix, level="1.1")
 
     response = client.post(f"/documents/{prefix}/items", json={"first": True})
 
@@ -464,7 +447,7 @@ def test_add_item_first_in_an_empty_document(client, document):
 # Spec 019 FR-031
 def test_add_item_first_and_after_returns_422(client, document):
     prefix = document["prefix"]
-    a = client.post(f"/documents/{prefix}/items", json={}).json()
+    a = add_item(client, prefix)
 
     response = client.post(f"/documents/{prefix}/items", json={"first": True, "after": a["uid"]})
 
@@ -486,9 +469,11 @@ def test_add_item_first_and_level_returns_422(client, document):
 def test_combined_publish_does_not_scan_child_documents_per_item(client, two_documents, tmp_path, monkeypatch):
     calls = []
     real = Item.find_child_items_and_documents
-    monkeypatch.setattr(Item, "find_child_items_and_documents", lambda self, *a, **k: calls.append(self) or real(self, *a, **k))
+    monkeypatch.setattr(
+        Item, "find_child_items_and_documents", lambda self, *a, **k: calls.append(self) or real(self, *a, **k)
+    )
 
     response = client.post("/publish", json={"format": "markdown", "destinationPath": str(tmp_path / "all")})
 
     assert response.status_code == 200, response.text
-    assert calls == []
+    assert not calls

@@ -44,10 +44,10 @@ def _lower_priority() -> None:
         if os.name == "nt":
             import ctypes  # pylint: disable=import-outside-toplevel
 
-            kernel32 = ctypes.windll.kernel32
+            kernel32 = ctypes.windll.kernel32  # pylint: disable=no-member  # Windows only, see the os.name check
             kernel32.SetPriorityClass(kernel32.GetCurrentProcess(), 0x4000)  # BELOW_NORMAL_PRIORITY_CLASS
         else:
-            os.nice(10)
+            os.nice(10)  # pylint: disable=no-member  # POSIX only, this is the else branch
     except OSError:
         pass
 
@@ -93,7 +93,7 @@ def run(conn, wanted, root: str, item_hook) -> None:
             conn.send((job, "error", None, str(error)))
 
 
-class Validator:
+class Validator:  # pylint: disable=too-many-instance-attributes  # data-model.md "Validator"
     """The server's side of the worker: starts it on the first check, sends jobs, cancels them."""
 
     def __init__(self, root: str, item_hook=None) -> None:

@@ -21,7 +21,7 @@ from doorstop.core.tree import Tree
 
 from doorstop_server.publish import publish_options
 
-from .conftest import set_item_attributes
+from .conftest import add_document, add_item, link, set_item_attributes
 
 CROSS_ROW = ("REQ002", "", "TST001")
 
@@ -29,13 +29,10 @@ CROSS_ROW = ("REQ002", "", "TST001")
 @pytest.fixture
 def xlink(client, project_root: Path) -> Path:
     for prefix, parent in (("REQ", None), ("SYS", "REQ"), ("TST", "SYS")):
-        body = {"prefix": prefix, "path": str(project_root / prefix.lower()), "separator": ""}
-        if parent:
-            body["parentPrefix"] = parent
-        assert client.post("/documents", json=body).status_code == 200
+        add_document(client, project_root, prefix, parent=parent, separator="")
     for prefix, count in (("REQ", 2), ("SYS", 2), ("TST", 1)):
         for _ in range(count):
-            assert client.post(f"/documents/{prefix}/items", json={}).status_code == 200
+            add_item(client, prefix)
     for child, parent in (
         ("SYS001", "REQ001"),
         ("SYS002", "REQ001"),
@@ -45,11 +42,6 @@ def xlink(client, project_root: Path) -> Path:
     ):
         link(client, child, parent)
     return project_root
-
-
-def link(client, child: str, parent: str) -> None:
-    response = client.post(f"/items/{child}/links", json={"parentUid": parent})
-    assert response.status_code == 200, response.text
 
 
 def unlink(client, child: str, parent: str) -> None:
@@ -184,10 +176,23 @@ def test_target_markdown_page_lists_cross_document_child(client, xlink, tmp_path
 
 
 # Spec 028 FR-005
+def test_child_links_are_listed_by_uid_whatever_order_the_items_were_loaded_in(client, xlink, tmp_path):
+    # On Linux os.walk returns files unsorted, so a tree can hold SYS002 before
+    # SYS001; the shared tree also keeps creation order. Neither may leak out.
+    client.get("/tree")
+    client.app.state.cached_tree.find_document("SYS")._items.reverse()  # pylint: disable=protected-access
+
+    req = page(publish_all(client, tmp_path / "out"), "REQ")
+
+    assert req.index('SYS.html#SYS001">SYS001') < req.index('SYS.html#SYS002">SYS002')
+
+
+# Spec 028 FR-005
 def test_hierarchy_only_child_links_equal_doorstop(client, xlink, tmp_path):
     unlink(client, "TST001", "REQ002")
     ours = tmp_path / "ours.md"
-    assert client.post("/documents/SYS/publish", json={"format": "markdown", "destinationPath": str(ours)}).status_code == 200
+    body = {"format": "markdown", "destinationPath": str(ours)}
+    assert client.post("/documents/SYS/publish", json=body).status_code == 200
     tree = doorstop.build(cwd=str(xlink), root=str(xlink), request_next_number=None)
     theirs = tmp_path / "theirs.md"
     publisher.publish(tree.find_document("SYS"), str(theirs), ext=".md")
@@ -245,6 +250,7 @@ def test_cli_matches_endpoint(client, xlink, tmp_path, flags, options):
         cwd=xlink,
         capture_output=True,
         text=True,
+        check=False,  # the assertion below shows stderr
     )
     assert result.returncode == 0, result.stderr
     api_out = publish_all(client, tmp_path / "api", **options)
@@ -255,7 +261,7 @@ def test_cli_matches_endpoint(client, xlink, tmp_path, flags, options):
 
 # Spec 028 FR-008
 def test_custom_template_keeps_complete_links(client, xlink, tmp_path):
-    views = xlink / "req" / "template" / "views"
+    views = xlink / "reqs" / "REQ" / "template" / "views"
     views.mkdir(parents=True)
     bundled = Path(doorstop.__file__).parent / "views"
     shutil.copy(bundled / "base.tpl", views / "base.tpl")

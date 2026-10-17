@@ -1,10 +1,10 @@
 """GET /tree?fields=... (spec 030): header fields for the document view."""
 
-from .conftest import set_item_attributes, tree_items
+from .conftest import add_item, set_item_attributes
 
 
 def _item_with(client, document, **attributes):
-    created = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    created = add_item(client)
     set_item_attributes(client.app.state.settings.project_root, created["uid"], **attributes)
     return created["uid"]
 
@@ -17,7 +17,7 @@ def _node(client, prefix, uid, query=""):
 def test_tree_returns_only_requested_fields_the_item_has(client, document):
     # spec 030 FR-013 FR-015
     uid = _item_with(client, document, ref="main.py")
-    other = client.post(f"/documents/{document['prefix']}/items", json={}).json()["uid"]
+    other = add_item(client)["uid"]
     client.patch(f"/items/{uid}", json={"fields": {"status": "draft"}})
 
     node = _node(client, document["prefix"], uid, "?fields=ref,status,missing")

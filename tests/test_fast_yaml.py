@@ -1,10 +1,9 @@
 """libyaml for Doorstop's YAML (doorstop_tree.use_libyaml): same data, byte-identical files.
 
-Real Doorstop items from the regression fixture plus one with unicode and a
-multi-line text, each loaded and dumped with PyYAML's Python and C code.
+Real Doorstop items (conftest.build_sample_project: unicode, a heading,
+multi-line text, links), each loaded and dumped with PyYAML's Python and C code.
 """
 
-import shutil
 from pathlib import Path
 
 import doorstop
@@ -14,19 +13,16 @@ from doorstop import common
 
 from doorstop_server.doorstop_tree import use_libyaml
 
-REGRESSION = Path(__file__).resolve().parents[2] / "testdata" / "regression"
+from tests.conftest import build_sample_project
 
 pytestmark = pytest.mark.skipif(not yaml.__with_libyaml__, reason="PyYAML built without libyaml")
 
 
 @pytest.fixture
 def items(tmp_path):
-    root = tmp_path / "regression"
-    shutil.copytree(REGRESSION, root)
+    root = build_sample_project(tmp_path)
     use_libyaml()
     tree = doorstop.build(cwd=str(root), root=str(root), request_next_number=None)
-    extra = tree.find_document("REQ").add_item()
-    extra.text = "Ünïcödé — a long line " + "x" * 120 + "\n\nand a second paragraph"
     return [item for document in tree for item in document if item.itemformat == "yaml"]
 
 

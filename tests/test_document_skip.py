@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from .conftest import add_document, add_item
+
 
 def marker_of(client, prefix: str) -> str:
     return next(d for d in client.get("/tree").json()["documents"] if d["prefix"] == prefix)["markerPath"]
@@ -11,18 +13,10 @@ def toggle(client, marker: str, skip: bool):
     return client.post("/documents/skip", json={"markerPath": marker, "skip": skip})
 
 
-def add_child(client, document, project_root) -> str:
-    client.post(
-        "/documents",
-        json={"prefix": "SYS", "path": str(project_root / "reqs" / "SYS"), "parentPrefix": document["prefix"]},
-    )
-    return marker_of(client, "SYS")
-
-
 # Spec 031 FR-002, FR-005, FR-009
-def test_skip_creates_marker_and_hides_document_from_tree_and_validation(client, document, project_root):
-    client.post(f"/documents/{document['prefix']}/items", json={})
-    sys_marker = add_child(client, document, project_root)
+def test_skip_creates_marker_and_hides_document_from_tree_and_validation(client, document, child_document):
+    add_item(client)
+    sys_marker = marker_of(client, "SYS")
 
     response = toggle(client, sys_marker, True)  # the leaf; the parent stays untouched
 
@@ -36,12 +30,9 @@ def test_skip_creates_marker_and_hides_document_from_tree_and_validation(client,
 
 
 # Spec 031 FR-009
-def test_skip_cascades_to_descendants_and_enable_does_not(client, document, project_root):
-    sys_marker = add_child(client, document, project_root)
-    client.post(
-        "/documents",
-        json={"prefix": "SUB", "path": str(project_root / "reqs" / "SUB"), "parentPrefix": "SYS"},
-    )
+def test_skip_cascades_to_descendants_and_enable_does_not(client, document, child_document, project_root):
+    sys_marker = marker_of(client, "SYS")
+    add_document(client, project_root, "SUB", parent="SYS")
     sub_marker = marker_of(client, "SUB")
     req_marker = marker_of(client, document["prefix"])
 
@@ -66,8 +57,8 @@ def test_skip_cascades_to_descendants_and_enable_does_not(client, document, proj
 
 
 # Spec 031 FR-009 (a branch member that was already disabled is left as it is)
-def test_cascade_leaves_already_disabled_descendants_alone(client, document, project_root):
-    sys_marker = add_child(client, document, project_root)
+def test_cascade_leaves_already_disabled_descendants_alone(client, document, child_document):
+    sys_marker = marker_of(client, "SYS")
     req_marker = marker_of(client, document["prefix"])
     toggle(client, sys_marker, True)
 
@@ -124,7 +115,7 @@ def test_marker_changed_by_hand_is_picked_up(client, document):
 
 # Spec 031 FR-006
 def test_editing_an_item_of_a_disabled_document_says_the_document_is_disabled(client, document):
-    item = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    item = add_item(client)
     toggle(client, marker_of(client, document["prefix"]), True)
 
     response = client.patch(f"/items/{item['uid']}", json={"text": "changed"})

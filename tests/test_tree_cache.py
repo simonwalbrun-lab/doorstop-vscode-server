@@ -4,16 +4,10 @@ from fastapi.testclient import TestClient
 
 from doorstop_server.app import create_app
 from doorstop_server.config import Settings
-from tests.conftest import set_item_text, tree_items
+from tests.conftest import add_item, set_item_text, tree_items
 
 # Read-only requests reuse one tree until a project file changes
 # (deps.get_tree_for_reading). These checks run against real Doorstop projects.
-
-
-def add_item(client) -> str:
-    response = client.post("/documents/REQ/items", json={})
-    assert response.status_code == 200, response.text
-    return response.json()["uid"]
 
 
 def test_unchanged_project_reuses_the_tree(client, document):
@@ -29,7 +23,7 @@ def test_unchanged_project_reuses_the_tree(client, document):
 
 
 def test_hand_edit_is_picked_up(client, document, project_root: Path):
-    uid = add_item(client)
+    uid = add_item(client)["uid"]
     client.get("/tree")
 
     set_item_text(project_root, uid, "edited by hand outside the server")
@@ -40,10 +34,10 @@ def test_hand_edit_is_picked_up(client, document, project_root: Path):
 
 # Spec 032 FR-022: mutations now share the cached tree; a read after one must still be current.
 def test_change_through_the_server_is_visible_on_the_next_read(client, document):
-    first = add_item(client)
+    first = add_item(client)["uid"]
     assert [item["uid"] for item in tree_items(client, "REQ")] == [first]
 
-    second = add_item(client)
+    second = add_item(client)["uid"]
 
     assert [item["uid"] for item in tree_items(client, "REQ")] == [first, second]
 

@@ -10,8 +10,14 @@ from pathlib import Path
 
 import doorstop
 import pytest
+from doorstop.common import DoorstopError, DoorstopInfo, DoorstopWarning
 
-from doorstop_server.validation_rules import classify, classify_severity
+from doorstop_server.validation_rules import CHECK_TABLE, classify, classify_severity
+from doorstop_server.validation_worker import Validator
+
+from tests import worker_hooks
+
+from .conftest import add_document, add_item, set_item_text
 
 
 def issues_for(client) -> list:
@@ -50,7 +56,7 @@ def build_tree(project_root: Path):
 # --------------------------------------------------------------------------
 
 
-def test_validate_writes_nothing(client, document, project_root):
+def test_validate_writes_nothing(client, linked_items, project_root):
     """Doorstop's validation rewrites files with its shipped defaults.
 
     With REFORMAT / REVIEW_NEW_ITEMS / STAMP_NEW_LINKS left at their defaults
@@ -59,9 +65,7 @@ def test_validate_writes_nothing(client, document, project_root):
     The project below deliberately contains both an unreviewed item and an
     unstamped link, so removing the read-only scope makes this test fail.
     """
-    parent = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    child = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    client.post(f"/items/{child['uid']}/links", json={"parentUid": parent["uid"]})
+    # linked_items: an unreviewed item and an unstamped link
 
     before = hash_tree(project_root)
     assert before, "the fixture project must contain files to compare"
@@ -74,13 +78,11 @@ def test_validate_writes_nothing(client, document, project_root):
     assert sorted(before) == sorted(after), "no file may be added or removed either"
 
 
-def test_validate_leaves_a_suspect_link_suspect(client, document, project_root):
+def test_validate_leaves_a_suspect_link_suspect(client, linked_items, project_root):
     """The sharp edge of the same defect: STAMP_NEW_LINKS would clear the
     suspicion during validation, so the problem would disappear by being
     reported."""
-    parent = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    child = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    client.post(f"/items/{child['uid']}/links", json={"parentUid": parent["uid"]})
+    _, child = linked_items
 
     issues_for(client)
 
@@ -101,10 +103,7 @@ def test_unrecognised_message_is_reported_as_unknown(client, document, project_r
     The check runs in the validation worker process (spec 032), so the message is
     injected through Doorstop's own item hook there rather than a monkeypatch here.
     """
-    from doorstop_server.validation_worker import Validator
-    from tests import worker_hooks
-
-    client.post(f"/documents/{document['prefix']}/items", json={"text": "some text"})
+    add_item(client, text="some text")
     client.app.state.validator = Validator(str(project_root), item_hook=worker_hooks.future_message)
 
     issues = issues_for(client)
@@ -116,7 +115,7 @@ def test_unrecognised_message_is_reported_as_unknown(client, document, project_r
 
 
 def test_no_message_retains_its_uid_prefix(client, document):
-    client.post(f"/documents/{document['prefix']}/items", json={})
+    add_item(client)
     tree = client.get("/tree").json()
     uids = [i["uid"] for d in tree["documents"] for i in d["items"]]
 
@@ -130,7 +129,6 @@ def test_no_message_retains_its_uid_prefix(client, document):
 def test_classify_severity_orders_subclasses_correctly():
     """DoorstopInfo subclasses DoorstopWarning subclasses DoorstopError, so a
     naive isinstance order would report everything as an error."""
-    from doorstop.common import DoorstopError, DoorstopInfo, DoorstopWarning
 
     assert classify_severity(DoorstopInfo("x")) == "info"
     assert classify_severity(DoorstopWarning("x")) == "warning"
@@ -145,7 +143,6 @@ def test_reserved_checks_are_never_emitted(check):
     """Reserved ids hold their anchor mapping but have no pattern: Doorstop 3.2
     never reports them, and implementing them ourselves would duplicate Doorstop
     validation logic (spec.md "Scope decision")."""
-    from doorstop_server.validation_rules import CHECK_TABLE
 
     rule = next(entry for entry in CHECK_TABLE if entry.check == check)
     assert rule.pattern is None, f"{check} must stay reserved, not implemented"
@@ -157,7 +154,7 @@ def test_reserved_checks_are_never_emitted(check):
 
 
 def test_linked_to_unknown_item_is_an_error(client, document, project_root):
-    item = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    item = add_item(client)
     tree = build_tree(project_root)
     tree.find_item(item["uid"]).link("REQ-999")
 
@@ -169,16 +166,12 @@ def test_linked_to_unknown_item_is_an_error(client, document, project_root):
     assert issue["uids"] == [item["uid"]]
 
 
-def test_inactive_parent_link_is_reported_as_unknown_item_error(
-    client, document, project_root
-):
+def test_inactive_parent_link_is_reported_as_unknown_item_error(client, linked_items, project_root):
     """The spec asks for "parent link is an inactive item ⇒ ERROR". Doorstop 3.2
     has no such check, but `tree.find_item()` skips inactive items, so the link
     surfaces as `linked to unknown item` - already at error severity, satisfying
     the spec's intent with no severity override of our own (research.md 2b)."""
-    parent = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    child = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    client.post(f"/items/{child['uid']}/links", json={"parentUid": parent["uid"]})
+    parent, child = linked_items
 
     tree = build_tree(project_root)
     tree.find_item(parent["uid"]).active = False
@@ -191,7 +184,7 @@ def test_inactive_parent_link_is_reported_as_unknown_item_error(
 
 
 def test_external_reference_not_found_is_an_error(client, document, project_root):
-    item = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    item = add_item(client)
     tree = build_tree(project_root)
     tree.find_item(item["uid"]).ref = "no/such/file.py"
 
@@ -207,14 +200,11 @@ def test_external_reference_not_found_is_an_error(client, document, project_root
 # --------------------------------------------------------------------------
 
 
-def test_suspect_link_is_a_warning_on_the_link_entry(client, document, project_root):
+def test_suspect_link_is_a_warning_on_the_link_entry(client, linked_items, project_root):
     """Fails without the read-only settings scope: STAMP_NEW_LINKS stamps the
     link during validation instead of reporting it (research.md 1)."""
-    from .conftest import set_item_text
 
-    parent = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    child = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    client.post(f"/items/{child['uid']}/links", json={"parentUid": parent["uid"]})
+    parent, child = linked_items
     client.post("/review", json={"scope": "all"})
     set_item_text(project_root, parent["uid"], "the parent changed after linking")
 
@@ -226,10 +216,8 @@ def test_suspect_link_is_a_warning_on_the_link_entry(client, document, project_r
     assert issue["uids"] == [child["uid"]]
 
 
-def test_linked_to_non_normative_is_a_warning(client, document, project_root):
-    parent = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    child = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    client.post(f"/items/{child['uid']}/links", json={"parentUid": parent["uid"]})
+def test_linked_to_non_normative_is_a_warning(client, linked_items, project_root):
+    parent, _ = linked_items
 
     tree = build_tree(project_root)
     tree.find_item(parent["uid"]).normative = False
@@ -241,10 +229,8 @@ def test_linked_to_non_normative_is_a_warning(client, document, project_root):
     assert issue["relatedUid"] == parent["uid"]
 
 
-def test_non_normative_item_with_links_is_a_warning(client, document, project_root):
-    parent = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    child = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    client.post(f"/items/{child['uid']}/links", json={"parentUid": parent["uid"]})
+def test_non_normative_item_with_links_is_a_warning(client, linked_items, project_root):
+    _, child = linked_items
 
     tree = build_tree(project_root)
     tree.find_item(child["uid"]).normative = False
@@ -260,19 +246,9 @@ def test_missing_parent_and_child_links_anchor_to_derived(client, document, proj
     """A parent document with an unlinked child document produces both halves of
     the pair: the child item lacks a parent link, the parent item lacks a child
     link. Both anchor to `derived:`."""
-    client.post(f"/documents/{document['prefix']}/items", json={})
-    child_path = project_root / "reqs" / "CHILD"
-    created = client.post(
-        "/documents",
-        json={
-            "prefix": "CHILD",
-            "path": str(child_path),
-            "separator": "-",
-            "parentPrefix": document["prefix"],
-        },
-    )
-    assert created.status_code == 200, created.text
-    client.post("/documents/CHILD/items", json={})
+    add_item(client)
+    add_document(client, project_root, "CHILD")
+    add_item(client, "CHILD")
 
     issues = issues_for(client)
 
@@ -289,7 +265,7 @@ def test_missing_parent_and_child_links_anchor_to_derived(client, document, proj
 
 
 def test_empty_text_and_unreviewed_changes(client, document, project_root):
-    item = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    item = add_item(client)
 
     issues = issues_for(client)
 
@@ -304,9 +280,8 @@ def test_empty_text_and_unreviewed_changes(client, document, project_root):
 
 
 def test_unreviewed_changes_after_edit(client, document, project_root):
-    from .conftest import set_item_text
 
-    item = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    item = add_item(client)
     client.post("/review", json={"scope": "all"})
     set_item_text(project_root, item["uid"], "changed after the review")
 
@@ -325,8 +300,8 @@ def test_duplicate_level_is_one_record_naming_both_items(client, document, proje
     Doorstop renumbers on add specifically to keep levels unique - a duplicate
     can only arise from an edit, which is exactly when the user needs to see it.
     """
-    first = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    second = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    first = add_item(client)
+    second = add_item(client)
 
     tree = build_tree(project_root)
     tree.find_item(first["uid"]).level = "1.0"
@@ -342,8 +317,8 @@ def test_duplicate_level_is_one_record_naming_both_items(client, document, proje
 def test_skipped_level_names_every_item_it_mentions(client, document, project_root):
     """`skipped level: 1.0 (REQ-002), 1.5 (REQ-003)` names two items in two
     separate parenthesised groups - the other fan-out shape."""
-    first = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    second = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    first = add_item(client)
+    second = add_item(client)
 
     tree = build_tree(project_root)
     tree.find_item(first["uid"]).level = "1.0"
@@ -363,18 +338,8 @@ def test_skipped_level_names_every_item_it_mentions(client, document, project_ro
 
 def test_empty_document_yields_a_document_level_issue(client, document, project_root):
     # Give REQ an item, so the only "no items" left is EMPTY's own.
-    client.post(f"/documents/{document['prefix']}/items", json={})
-    empty_path = project_root / "reqs" / "EMPTY"
-    created = client.post(
-        "/documents",
-        json={
-            "prefix": "EMPTY",
-            "path": str(empty_path),
-            "separator": "-",
-            "parentPrefix": document["prefix"],
-        },
-    )
-    assert created.status_code == 200, created.text
+    add_item(client)
+    add_document(client, project_root, "EMPTY")
 
     issue = only(issues_for(client), "no_items")
 
@@ -386,17 +351,8 @@ def test_empty_document_yields_a_document_level_issue(client, document, project_
 def test_issues_are_returned_for_every_document(client, document, project_root):
     """Guarantee 2, whole tree: no editor is open on anything here, and the
     second document is empty, yet both are represented (FR-015)."""
-    client.post(f"/documents/{document['prefix']}/items", json={})
-    other_path = project_root / "reqs" / "OTHER"
-    client.post(
-        "/documents",
-        json={
-            "prefix": "OTHER",
-            "path": str(other_path),
-            "separator": "-",
-            "parentPrefix": document["prefix"],
-        },
-    )
+    add_item(client)
+    add_document(client, project_root, "OTHER")
 
     prefixes = {issue["documentPrefix"] for issue in issues_for(client)}
 

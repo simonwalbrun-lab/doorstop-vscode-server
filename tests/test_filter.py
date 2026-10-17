@@ -5,7 +5,7 @@ from pathlib import Path
 import doorstop
 import pytest
 
-from .conftest import set_item_attributes
+from .conftest import add_document, add_item, link, set_item_attributes
 
 # Keep in sync with SIMPLE_EXAMPLE / COMPLEX_EXAMPLE in src/filterNotebook.ts.
 SIMPLE_EXAMPLE = "# Simple: every item that has not been reviewed yet\nreviewed == false\n"
@@ -40,29 +40,16 @@ def project(client, document, project_root):
     REQ-003 (2.1, no header)         <- (no children)
     """
 
-    def add(prefix, **body):
-        response = client.post(f"/documents/{prefix}/items", json=body)
-        assert response.status_code == 200, response.text
-        return response.json()["uid"]
-
-    add("REQ", level="1.1", header="Login", text="Users log in")
-    add("REQ", level="1.2", header="Logout", text="Users log out")
-    add("REQ", level="2.1", text="Audit trail | keep\neverything")
+    add_item(client, level="1.1", header="Login", text="Users log in")
+    add_item(client, level="1.2", header="Logout", text="Users log out")
+    add_item(client, level="2.1", text="Audit trail | keep\neverything")
     set_item_attributes(project_root, "REQ-002", ref="logout_impl")
 
-    response = client.post(
-        "/documents",
-        json={
-            "prefix": "TST",
-            "path": str(project_root / "reqs" / "TST"),
-            "parentPrefix": "REQ",
-            "separator": "-",
-        },
-    )
-    assert response.status_code == 200, response.text
-    for level, parent, status in [("1.1", "REQ-001", "approved"), ("1.2", "REQ-002", "draft"), ("1.3", "REQ-001", "draft")]:
-        uid = add("TST", level=level, text=f"test of {parent}")
-        client.post(f"/items/{uid}/links", json={"parentUid": parent})
+    add_document(client, project_root, "TST")
+    rows = [("1.1", "REQ-001", "approved"), ("1.2", "REQ-002", "draft"), ("1.3", "REQ-001", "draft")]
+    for level, parent, status in rows:
+        uid = add_item(client, "TST", level=level, text=f"test of {parent}")["uid"]
+        link(client, uid, parent)
         set_custom(project_root, uid, "status", status)
 
     client.post("/review", json={"scope": "item", "target": "REQ-001"})

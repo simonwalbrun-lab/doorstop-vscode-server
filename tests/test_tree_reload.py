@@ -17,18 +17,15 @@ from doorstop_server import deps, doorstop_tree
 from doorstop_server.app import create_app
 from doorstop_server.config import Settings
 from doorstop_server.routers import tree as tree_router
-from tests.conftest import set_item_text
+from tests.conftest import add_document, add_item, set_item_text
 
 
 @pytest.fixture
 def project(client: TestClient, document: dict, project_root: Path) -> dict:
     """REQ with a child TST beside it and a child NST nested inside REQ's folder; one item each."""
-    for prefix, folder in (("TST", project_root / "reqs" / "TST"), ("NST", project_root / "reqs" / "REQ" / "NST")):
-        response = client.post(
-            "/documents", json={"prefix": prefix, "path": str(folder), "parentPrefix": "REQ", "separator": "-"}
-        )
-        assert response.status_code == 200, response.text
-    uids = {prefix: client.post(f"/documents/{prefix}/items", json={}).json()["uid"] for prefix in ("REQ", "TST", "NST")}
+    add_document(client, project_root, "TST")
+    add_document(client, project_root, "NST", path=str(project_root / "reqs" / "REQ" / "NST"))
+    uids = {prefix: add_item(client, prefix)["uid"] for prefix in ("REQ", "TST", "NST")}
     client.get("/tree")  # warm the shared tree
     return uids
 
@@ -36,7 +33,7 @@ def project(client: TestClient, document: dict, project_root: Path) -> dict:
 @pytest.fixture
 def spy(monkeypatch) -> dict:
     seen = {"builds": 0, "reloaded": []}
-    real_load_tree, real_iter = doorstop_tree.load_tree, Document._iter
+    real_load_tree, real_iter = doorstop_tree.load_tree, Document._iter  # pylint: disable=protected-access
 
     def load_tree(settings):
         seen["builds"] += 1
@@ -150,11 +147,13 @@ def test_the_item_cache_is_complete_after_a_partial_reload(client, project, proj
     set_item_text(project_root, project["REQ"], "edited by hand")
     scans = []
     real_find_item = Document.find_item
-    monkeypatch.setattr(Document, "find_item", lambda self, *a, **k: scans.append(self) or real_find_item(self, *a, **k))
+    monkeypatch.setattr(
+        Document, "find_item", lambda self, *a, **k: scans.append(self) or real_find_item(self, *a, **k)
+    )
 
     client.get("/tree")
 
-    assert scans == [], "every link lookup is answered from the item cache"
+    assert not scans, "every link lookup is answered from the item cache"
     cache = client.app.state.cached_tree._item_cache  # pylint: disable=protected-access
     assert {str(uid) for uid in cache} >= set(project.values())
 
@@ -200,11 +199,11 @@ def test_fingerprint_matches_a_plain_walk(project_root, project):
 # Spec 032 FR-022, FR-023: an unchanged tree answers from the last response, a change rebuilds it.
 def test_an_unchanged_tree_reuses_its_answer(client, project, monkeypatch):
     built = []
-    real_links = tree_router._item_links
+    real_links = tree_router._item_links  # pylint: disable=protected-access
     monkeypatch.setattr(tree_router, "_item_links", lambda item, tree: built.append(item) or real_links(item, tree))
 
     first = client.get("/tree").json()
-    assert built == [], "the fixture's warm-up request is reused"
+    assert not built, "the fixture's warm-up request is reused"
     client.get("/tree?fields=status")
     with_fields = len(built)
     assert with_fields > 0, "other fields are their own answer"

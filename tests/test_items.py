@@ -1,11 +1,11 @@
 from pathlib import Path
 
-from .conftest import tree_items
+from .conftest import add_document, add_item, tree_items
 
 
 def test_link_and_unlink_items(client, document):
-    parent = client.post(f"/documents/{document['prefix']}/items", json={}).json()
-    child = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    parent = add_item(client)
+    child = add_item(client)
 
     link_response = client.post(f"/items/{child['uid']}/links", json={"parentUid": parent["uid"]})
     assert link_response.status_code == 200
@@ -27,7 +27,7 @@ def test_link_and_unlink_items(client, document):
 
 
 def test_self_link_is_rejected(client, document):
-    item = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    item = add_item(client)
 
     response = client.post(f"/items/{item['uid']}/links", json={"parentUid": item["uid"]})
 
@@ -36,7 +36,7 @@ def test_self_link_is_rejected(client, document):
 
 
 def test_link_to_unknown_parent_returns_400(client, document):
-    item = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    item = add_item(client)
 
     response = client.post(f"/items/{item['uid']}/links", json={"parentUid": "REQ-999"})
 
@@ -52,7 +52,7 @@ def _item(client, prefix, uid):
 
 
 def test_update_item_header_and_text(client, document):
-    created = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    created = add_item(client)
 
     response = client.patch(f"/items/{created['uid']}", json={"header": "H", "text": "T\nU"})
 
@@ -67,7 +67,7 @@ def test_update_item_header_and_text(client, document):
 
 
 def test_update_item_text_only_leaves_header(client, document):
-    created = client.post(f"/documents/{document['prefix']}/items", json={"header": "Keep"}).json()
+    created = add_item(client, header="Keep")
 
     client.patch(f"/items/{created['uid']}", json={"text": "new text"})
 
@@ -77,18 +77,8 @@ def test_update_item_text_only_leaves_header(client, document):
 
 
 def test_update_markdown_item(client, document, project_root):
-    md_path = project_root / "reqs" / "MD"
-    client.post(
-        "/documents",
-        json={
-            "prefix": "MD",
-            "path": str(md_path),
-            "parentPrefix": document["prefix"],
-            "separator": "-",
-            "itemFormat": "markdown",
-        },
-    )
-    created = client.post("/documents/MD/items", json={}).json()
+    add_document(client, project_root, "MD", itemFormat="markdown")
+    created = add_item(client, "MD")
 
     response = client.patch(f"/items/{created['uid']}", json={"header": "Title", "text": "Body line"})
 
@@ -103,7 +93,7 @@ def test_update_markdown_item(client, document, project_root):
 
 
 def test_update_item_empty_body_returns_422(client, document):
-    created = client.post(f"/documents/{document['prefix']}/items", json={}).json()
+    created = add_item(client)
 
     response = client.patch(f"/items/{created['uid']}", json={})
 
@@ -120,9 +110,9 @@ def test_update_unknown_item_returns_400(client, document):
 
 def test_delete_item_removes_file_and_renumbers(client, document):
     prefix = document["prefix"]
-    first = client.post(f"/documents/{prefix}/items", json={"level": "1.1"}).json()
-    middle = client.post(f"/documents/{prefix}/items", json={"level": "1.2"}).json()
-    last = client.post(f"/documents/{prefix}/items", json={"level": "1.3"}).json()
+    first = add_item(client, prefix, level="1.1")
+    middle = add_item(client, prefix, level="1.2")
+    last = add_item(client, prefix, level="1.3")
 
     response = client.delete(f"/items/{middle['uid']}")
 
