@@ -1,3 +1,4 @@
+import importlib.util
 from pathlib import Path
 
 from doorstop import settings
@@ -46,6 +47,4 @@ def test_no_child_links_applies_and_restores_setting(client, document, child_doc
 
 # Spec 028 FR-005
 def test_ci_wrapper_module_is_gone():
-    import importlib.util
-
     assert importlib.util.find_spec("doorstop_server.publish") is None

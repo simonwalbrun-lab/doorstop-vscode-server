@@ -3,7 +3,6 @@ from pathlib import Path
 
 import doorstop.core as doorstop_core
 import pytest
-from doorstop.core.item import Item
 
 from doorstop_server.routers.documents import NATIVE_SHARED_TEMPLATES
 
