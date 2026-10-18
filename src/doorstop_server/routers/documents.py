@@ -3,12 +3,12 @@ from pathlib import Path
 
 from doorstop.common import DoorstopError, copy_dir_contents, delete
 from doorstop.core import exporter, importer, publisher, template as doorstop_template
+from doorstop import settings
 from doorstop.core.document import Document
 from fastapi import APIRouter, Depends, Request
 
 from doorstop_server.deps import get_settings, get_tree
 from doorstop_server.errors import DoorstopApiError
-from doorstop_server.publish import publish_options
 from doorstop_server.routers.items import apply_prose
 from doorstop_server.schemas import (
     AddItemRequest,
@@ -237,11 +237,22 @@ def _borrowed_template(tree, document, body: PublishRequest):
         delete(str(target))
 
 
+@contextmanager
+def _child_links(enabled: bool):
+    """Doorstop's --no-child-links is this module setting; restored afterwards."""
+    original = settings.PUBLISH_CHILD_LINKS
+    settings.PUBLISH_CHILD_LINKS = enabled
+    try:
+        yield
+    finally:
+        settings.PUBLISH_CHILD_LINKS = original
+
+
 @router.post("/{prefix}/publish", response_model=PublishResponse)
 async def publish_document(prefix: str, body: PublishRequest, tree=Depends(get_tree)) -> PublishResponse:
     document = tree.find_document(prefix)
     ext = _PUBLISH_EXTENSIONS[body.format]
-    with _borrowed_template(tree, document, body), publish_options(body.traceability, body.childLinks):
+    with _borrowed_template(tree, document, body), _child_links(body.childLinks):
         path = publisher.publish(document, body.destinationPath, ext=ext, template=body.template)
     return PublishResponse(path=_resolve_written_path(path, body.destinationPath))
 
@@ -250,7 +261,7 @@ async def publish_document(prefix: str, body: PublishRequest, tree=Depends(get_t
 async def publish_tree(body: PublishRequest, tree=Depends(get_tree)) -> PublishResponse:
     """Doorstop's own tree publish: every document in one run (spec 024 US2)."""
     ext = _PUBLISH_EXTENSIONS[body.format]
-    with publish_options(body.traceability, body.childLinks):
+    with _child_links(body.childLinks):
         path = publisher.publish(tree, body.destinationPath, ext=ext, template=body.template)
     index = Path(path) / "index.html"
     return PublishResponse(path=str(index) if index.exists() else path)
