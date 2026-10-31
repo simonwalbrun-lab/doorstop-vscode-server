@@ -56,7 +56,7 @@ def item_file(project_root: Path, uid: str) -> Path:
 
 def assert_same_as_fresh(client: TestClient, project_root: Path) -> None:
     # Spec 032 FR-022: whatever was reloaded, the answers equal a brand-new server's.
-    fresh = TestClient(create_app(Settings(project_root=str(project_root), host="127.0.0.1", port=0)))
+    fresh = TestClient(create_app(Settings(project_root=str(project_root), host="127.0.0.1", port=0)), base_url="http://127.0.0.1")
     assert client.get("/tree").json() == fresh.get("/tree").json()
     assert client.get("/validate").json() == fresh.get("/validate").json()
 

@@ -19,11 +19,12 @@ from typing import Callable, Dict, List, NamedTuple, Optional, Tuple
 
 import yaml
 from doorstop.core.types import Level
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from doorstop_server.deps import get_tree_for_reading, load_items
 from doorstop_server.errors import DoorstopApiError
-from doorstop_server.schemas import FilterItem, FilterRequest, FilterResponse
+from doorstop_server.routers.items import is_protected_field
+from doorstop_server.schemas import FilterItem, FilterRequest, FilterResponse, FilterVocabulary
 
 router = APIRouter()
 
@@ -101,6 +102,8 @@ def _compare(op, value, literal) -> bool:
 # as a subtraction: the leading name is swapped for a placeholder before parsing.
 _LEADING_NAME = re.compile(r"\s*([A-Za-z_][\w-]*)")
 _PLACEHOLDER = "__attr__"
+
+_MAX_SUGGESTED_VALUES = 50
 
 DEFAULT_COLUMNS = ["document", "level", "header"]
 _MAX_CELL = 80
@@ -267,3 +270,32 @@ async def filter_items(body: FilterRequest, tree=Depends(get_tree_for_reading)) 
             if predicate(item, index)
         ]
     )
+
+
+@router.get("/filter/vocabulary", response_model=FilterVocabulary)
+async def filter_vocabulary(
+    request: Request, tree=Depends(get_tree_for_reading)
+) -> FilterVocabulary:
+    """Custom attribute names and their values, for autocomplete in filter cells (FR-016)."""
+    state = request.app.state
+    cached = state.filter_vocabulary
+    if cached and cached[0] == state.tree_version:
+        return cached[1]
+    load_items(tree)
+    values: Dict[str, set] = {}
+    for document in tree:
+        for item in document:
+            for name, value in item.data.items():
+                if name in _STANDARD or is_protected_field(item, name):
+                    continue
+                # A list- or dict-valued attribute is still a name to suggest, without values.
+                found = values.setdefault(name, set())
+                if isinstance(value, (str, int, float, bool)) and str(value) != "":
+                    found.add(str(value))
+    response = FilterVocabulary(
+        attributes={
+            name: sorted(found)[:_MAX_SUGGESTED_VALUES] for name, found in sorted(values.items())
+        }
+    )
+    state.filter_vocabulary = (state.tree_version, response)
+    return response

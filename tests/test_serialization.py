@@ -18,7 +18,7 @@ def test_concurrent_add_requests_are_processed_one_at_a_time(tmp_path: Path):
 
     async def run() -> list[str]:
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as async_client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as async_client:
             create_response = await async_client.post(
                 "/documents",
                 json={
@@ -50,7 +50,7 @@ def test_health_is_not_blocked_by_the_lock(tmp_path: Path):
 
     async def run() -> None:
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as async_client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as async_client:
             create_response = await async_client.post(
                 "/documents", json={"prefix": "REQ", "path": str(tmp_path / "reqs" / "REQ")}
             )

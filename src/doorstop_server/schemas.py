@@ -205,3 +205,8 @@ class FilterResponse(BaseModel):
     # Table columns after UID: the cell's `order:` or the default columns.
     columns: List[str]
     items: List[FilterItem]
+
+
+class FilterVocabulary(BaseModel):
+    # Custom attribute name -> its distinct scalar values (filter autocomplete, spec 022 FR-016).
+    attributes: Dict[str, List[str]]

@@ -60,7 +60,7 @@ def use_hook(client: TestClient, project_root: Path):
 def run(app, scenario):
     async def main():
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test", timeout=30) as async_client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1", timeout=30) as async_client:
             return await scenario(async_client)
 
     return asyncio.run(main())
@@ -279,7 +279,7 @@ def test_background_results_equal_the_whole_tree_validation(tmp_path):
     root = build_sample_project(tmp_path)
     app = create_app(Settings(project_root=str(root), host="127.0.0.1", port=0))
     try:
-        response = TestClient(app).get("/validate")
+        response = TestClient(app, base_url="http://127.0.0.1").get("/validate")
     finally:
         app.state.validator.close()
 

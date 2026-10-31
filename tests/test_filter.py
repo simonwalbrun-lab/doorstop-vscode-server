@@ -78,6 +78,7 @@ def assert_invalid(client, query, *fragments):
 # --- US1: single conditions, rows, errors -----------------------------------
 
 
+# Spec 022 FR-003, FR-004
 def test_document_filter_returns_rows_in_tree_order(project):
     response = run(project, 'document == "REQ"')
 
@@ -93,11 +94,13 @@ def test_document_filter_returns_rows_in_tree_order(project):
     assert items[2]["header"] is None
 
 
+# Spec 022 FR-006
 def test_boolean_attribute(project):
     assert "REQ-001" not in uids(project, "reviewed == false")
     assert uids(project, 'and:\n  - document == "REQ"\n  - reviewed == true\n') == ["REQ-001"]
 
 
+# Spec 022 FR-008
 def test_text_methods(project):
     assert uids(project, 'header.startsWith("Log")') == ["REQ-001", "REQ-002"]
     assert uids(project, 'text.contains("log out")') == ["REQ-002"]
@@ -106,19 +109,23 @@ def test_text_methods(project):
     assert "REQ-001" in uids(project, "ref.isEmpty()")
 
 
+# Spec 022 FR-008
 def test_level_uses_doorstop_order(project):
     assert uids(project, 'and:\n  - document == "REQ"\n  - level >= "1.2"\n') == ["REQ-002", "REQ-003"]
     assert uids(project, 'and:\n  - document == "REQ"\n  - level < "1.10"\n') == ["REQ-001", "REQ-002"]
 
 
+# Spec 022 FR-004
 def test_no_match_is_empty_list(project):
     assert uids(project, 'uid == "NOPE-999"') == []
 
 
+# Spec 022 FR-008
 def test_type_mismatch_does_not_match(project):
     assert uids(project, "header > 3") == []
 
 
+# Spec 022 FR-002
 def test_new_notebook_examples_run(project):
     assert "REQ-002" in uids(project, SIMPLE_EXAMPLE)
 
@@ -128,14 +135,17 @@ def test_new_notebook_examples_run(project):
     assert [item["uid"] for item in result["items"]] == ["REQ-001", "REQ-002"]
 
 
+# Spec 022 FR-011
 def test_blank_query_is_rejected(project):
     assert_invalid(project, "   \n")
 
 
+# Spec 022 FR-011
 def test_yaml_syntax_error_names_line(project):
     assert_invalid(project, "and: [", "line")
 
 
+# Spec 022 FR-010, FR-011
 @pytest.mark.parametrize(
     "query",
     ['__import__("os")', "uid.__class__ == 1", 'uid == "a" and uid == "b"', "uid == text", "!reviewed"],
@@ -147,15 +157,18 @@ def test_unsupported_expressions_are_rejected(project, query):
 # --- US3: nested groups ------------------------------------------------------
 
 
+# Spec 022 FR-009
 def test_or_group(project):
     assert uids(project, 'or:\n  - uid == "REQ-001"\n  - uid == "TST-002"\n') == ["REQ-001", "TST-002"]
 
 
+# Spec 022 FR-009
 def test_not_group_excludes_any_listed_match(project):
     query = 'and:\n  - document == "REQ"\n  - not:\n      - uid == "REQ-001"\n      - uid == "REQ-003"\n'
     assert uids(project, query) == ["REQ-002"]
 
 
+# Spec 022 FR-009
 def test_three_level_nesting(project):
     query = """
 and:
@@ -170,6 +183,7 @@ and:
     assert uids(project, query) == ["REQ-002", "REQ-003", "TST-001"]
 
 
+# Spec 022 FR-011
 @pytest.mark.parametrize(
     "query",
     ['and:\n  - uid == "a"\nor:\n  - uid == "b"\n', "and: []", 'foo:\n  - uid == "a"\n', "and: [42]", "42"],
@@ -181,42 +195,50 @@ def test_structure_errors(project, query):
 # --- US4: custom attributes, links, related items ---------------------------
 
 
+# Spec 022 FR-007
 def test_custom_attribute(project):
     assert uids(project, 'status == "approved"') == ["TST-001"]
     # REQ items have no status: no match, no error.
     assert uids(project, 'and:\n  - document == "REQ"\n  - status != "x"\n') == []
 
 
+# Spec 022 FR-006
 def test_links_contains(project):
     assert uids(project, 'links.contains("REQ-001")') == ["TST-001", "TST-003"]
 
 
+# Spec 022 FR-007a
 def test_has_child(project):
     query = 'and:\n  - document == "REQ"\n  - hasChild: status == "approved"\n'
     assert uids(project, query) == ["REQ-001"]
 
 
+# Spec 022 FR-007a
 def test_has_parent(project):
     assert uids(project, 'hasParent: header == "Logout"') == ["TST-002"]
     assert uids(project, 'hasParent: document == "REQ"') == ["TST-001", "TST-002", "TST-003"]
 
 
+# Spec 022 FR-007a
 def test_has_child_with_nested_group(project):
     query = 'hasChild:\n  and:\n    - status == "draft"\n    - text.contains("REQ-002")\n'
     assert uids(project, query) == ["REQ-002"]
 
 
+# Spec 022 FR-007a
 def test_item_without_children(project):
     assert "REQ-003" not in uids(project, 'hasChild: uid != ""')
     query = 'and:\n  - document == "REQ"\n  - not:\n      - hasChild: uid != ""\n'
     assert uids(project, query) == ["REQ-003"]
 
 
+# Spec 022 FR-008
 def test_is_not_empty(project):
     assert uids(project, "ref.isNotEmpty()") == ["REQ-002"]
     assert uids(project, "status.isNotEmpty()") == ["TST-001", "TST-002", "TST-003"]
 
 
+# Spec 022 FR-007a
 def test_dangling_parent_link_is_ignored(project, project_root):
     project.post("/items/TST-001/links", json={"parentUid": "REQ-003"})
     Path(next(project_root.rglob("REQ-003.yml"))).unlink()
@@ -237,6 +259,7 @@ def values_of(result, uid):
     return next(item["values"] for item in result["items"] if item["uid"] == uid)
 
 
+# Spec 022 FR-015
 def test_order_selects_columns(project):
     result = body(project, 'filters: document == "TST"\norder: [status, header]\n')
 
@@ -244,6 +267,7 @@ def test_order_selects_columns(project):
     assert values_of(result, "TST-001") == ["approved", ""]
 
 
+# Spec 022 FR-004
 def test_default_columns_fall_back_to_text_for_header(project):
     result = body(project, 'document == "REQ"')
 
@@ -252,10 +276,12 @@ def test_default_columns_fall_back_to_text_for_header(project):
     assert values_of(result, "REQ-003")[2].startswith("Audit trail")
 
 
+# Spec 022 FR-015
 def test_order_drops_uid(project):
     assert body(project, 'filters: uid == "TST-001"\norder: [uid, status]\n')["columns"] == ["status"]
 
 
+# Spec 022 FR-015
 def test_list_values_are_comma_separated(project):
     project.post("/items/TST-001/links", json={"parentUid": "REQ-002"})
 
@@ -264,6 +290,7 @@ def test_list_values_are_comma_separated(project):
     assert values_of(result, "TST-001") == ["REQ-001, REQ-002"]
 
 
+# Spec 022 FR-015
 def test_long_values_are_cut_to_80_characters(project, project_root):
     set_custom(project_root, "TST-001", "note", "y" * 100)
 
@@ -272,6 +299,7 @@ def test_long_values_are_cut_to_80_characters(project, project_root):
     assert values_of(result, "TST-001") == ["y" * 80]
 
 
+# Spec 022 FR-015
 @pytest.mark.parametrize(
     "query",
     [
@@ -285,6 +313,7 @@ def test_malformed_order_is_rejected(project, query):
     assert_invalid(project, query)
 
 
+# Spec 022 FR-007
 def test_hyphenated_custom_attribute(project, project_root):
     set_custom(project_root, "TST-001", "invented-by", "Claude")
 
@@ -295,3 +324,27 @@ def test_hyphenated_custom_attribute(project, project_root):
     assert uids(project, 'uid == "Cl-aude"') == []  # hyphens in literals untouched
     result = body(project, 'filters: uid == "TST-001"\norder: [invented-by]\n')
     assert values_of(result, "TST-001") == ["Claude"]
+
+
+# --- FR-016: autocomplete vocabulary -----------------------------------------
+
+
+# Spec 022 FR-016
+def test_vocabulary_lists_custom_attribute_values(project):
+    response = project.get("/filter/vocabulary")
+    assert response.status_code == 200, response.text
+    attributes = response.json()["attributes"]
+    assert attributes["status"] == ["approved", "draft"]
+    for standard in ("uid", "level", "header", "text", "ref", "active", "links", "reviewed"):
+        assert standard not in attributes
+
+
+# Spec 022 FR-016
+def test_vocabulary_follows_changes(project, project_root):
+    assert project.get("/filter/vocabulary").json()["attributes"]["status"] == ["approved", "draft"]
+    set_custom(project_root, "TST-002", "status", "blocked")
+    set_custom(project_root, "TST-003", "tags", ["a", "b"])
+
+    attributes = project.get("/filter/vocabulary").json()["attributes"]
+    assert attributes["status"] == ["approved", "blocked", "draft"]
+    assert attributes["tags"] == []
