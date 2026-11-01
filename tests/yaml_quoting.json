@@ -1,0 +1,206 @@
+[
+  {
+    "value": "Approved",
+    "quoted": "Approved"
+  },
+  {
+    "value": "Mister A",
+    "quoted": "Mister A"
+  },
+  {
+    "value": "Draft v1.0",
+    "quoted": "Draft v1.0"
+  },
+  {
+    "value": "A-B_c/d (x)",
+    "quoted": "A-B_c/d (x)"
+  },
+  {
+    "value": "it's",
+    "quoted": "it's"
+  },
+  {
+    "value": "1.0",
+    "quoted": "'1.0'"
+  },
+  {
+    "value": "1.10",
+    "quoted": "'1.10'"
+  },
+  {
+    "value": "007",
+    "quoted": "'007'"
+  },
+  {
+    "value": "0x1F",
+    "quoted": "'0x1F'"
+  },
+  {
+    "value": "1:30",
+    "quoted": "'1:30'"
+  },
+  {
+    "value": "2026-11-01",
+    "quoted": "'2026-11-01'"
+  },
+  {
+    "value": "2026-11-01T09:05",
+    "quoted": "'2026-11-01T09:05'"
+  },
+  {
+    "value": ".inf",
+    "quoted": "'.inf'"
+  },
+  {
+    "value": "Mister A: lead",
+    "quoted": "'Mister A: lead'"
+  },
+  {
+    "value": "a #b",
+    "quoted": "'a #b'"
+  },
+  {
+    "value": "yes",
+    "quoted": "'yes'"
+  },
+  {
+    "value": "No",
+    "quoted": "'No'"
+  },
+  {
+    "value": "ON",
+    "quoted": "'ON'"
+  },
+  {
+    "value": "off",
+    "quoted": "'off'"
+  },
+  {
+    "value": "y",
+    "quoted": "'y'"
+  },
+  {
+    "value": "n",
+    "quoted": "'n'"
+  },
+  {
+    "value": "true",
+    "quoted": "'true'"
+  },
+  {
+    "value": "False",
+    "quoted": "'False'"
+  },
+  {
+    "value": "null",
+    "quoted": "'null'"
+  },
+  {
+    "value": "~",
+    "quoted": "'~'"
+  },
+  {
+    "value": "",
+    "quoted": "''"
+  },
+  {
+    "value": " x",
+    "quoted": "' x'"
+  },
+  {
+    "value": "x ",
+    "quoted": "'x '"
+  },
+  {
+    "value": "it's: x",
+    "quoted": "'it''s: x'"
+  },
+  {
+    "value": "-x",
+    "quoted": "'-x'"
+  },
+  {
+    "value": "?x",
+    "quoted": "'?x'"
+  },
+  {
+    "value": ":x",
+    "quoted": "':x'"
+  },
+  {
+    "value": ",x",
+    "quoted": "',x'"
+  },
+  {
+    "value": "[x",
+    "quoted": "'[x'"
+  },
+  {
+    "value": "]x",
+    "quoted": "']x'"
+  },
+  {
+    "value": "{x",
+    "quoted": "'{x'"
+  },
+  {
+    "value": "}x",
+    "quoted": "'}x'"
+  },
+  {
+    "value": "#x",
+    "quoted": "'#x'"
+  },
+  {
+    "value": "&x",
+    "quoted": "'&x'"
+  },
+  {
+    "value": "*x",
+    "quoted": "'*x'"
+  },
+  {
+    "value": "!x",
+    "quoted": "'!x'"
+  },
+  {
+    "value": "|x",
+    "quoted": "'|x'"
+  },
+  {
+    "value": ">x",
+    "quoted": "'>x'"
+  },
+  {
+    "value": "'x",
+    "quoted": "'''x'"
+  },
+  {
+    "value": "\"x",
+    "quoted": "'\"x'"
+  },
+  {
+    "value": "%x",
+    "quoted": "'%x'"
+  },
+  {
+    "value": "@x",
+    "quoted": "'@x'"
+  },
+  {
+    "value": "`x",
+    "quoted": "'`x'"
+  },
+  {
+    "value": "TODO:",
+    "quoted": "'TODO:'"
+  },
+  {
+    "value": "a:\tb",
+    "quoted": "'a:\tb'"
+  },
+  {
+    "value": "a\t#b",
+    "quoted": "'a\t#b'"
+  }
+]
