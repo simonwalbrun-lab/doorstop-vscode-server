@@ -3,7 +3,8 @@
 A filter is YAML: one expression string, or a single-key mapping -
 ``and`` / ``or`` / ``not`` (a list of filters) or ``hasChild`` / ``hasParent``
 (one filter). A cell may also wrap it Bases-style as ``filters:`` plus an
-optional ``order:`` list naming the table's columns. Expressions are parsed with ``ast`` and checked against a small
+optional ``order:`` list naming the table's columns and an optional ``edit:``
+section (spec 036, compiled by routers/batch.py). Expressions are parsed with ``ast`` and checked against a small
 whitelist (one comparison, or one ``contains`` / ``startsWith`` / ``isEmpty``
 call) - nothing is ever ``eval``'d. The whole filter is compiled before any
 item is looked at, so a malformed filter fails even on an empty project.
@@ -23,6 +24,7 @@ from fastapi import APIRouter, Depends, Request
 
 from doorstop_server.deps import get_tree_for_reading, load_items
 from doorstop_server.errors import DoorstopApiError
+from doorstop_server.routers.batch import Operation, compile_edit, load_cell
 from doorstop_server.routers.items import is_protected_field
 from doorstop_server.schemas import FilterItem, FilterRequest, FilterResponse, FilterVocabulary
 
@@ -219,10 +221,13 @@ def _cell(item, name: str, default_columns: bool) -> str:
     return text[:_MAX_CELL]
 
 
-def compile_filter(query: str) -> Tuple[Predicate, Optional[List[str]]]:
-    """The cell's predicate and its `order:` columns (after UID), or None without `order:`."""
+def compile_filter(query: str) -> Tuple[Predicate, Optional[List[str]], Optional[List[Operation]]]:
+    """The cell's predicate, its `order:` columns (after UID) and its `edit:` operations.
+
+    Columns and operations are None when the cell has no `order:` / `edit:`.
+    """
     try:
-        node = yaml.safe_load(query) if query.strip() else None
+        node = load_cell(query) if query.strip() else None
     except yaml.YAMLError as exc:
         mark = getattr(exc, "problem_mark", None)
         where = f" at line {mark.line + 1}" if mark else ""
@@ -230,18 +235,19 @@ def compile_filter(query: str) -> Tuple[Predicate, Optional[List[str]]]:
         raise _invalid(f"Invalid YAML{where}: {problem}") from None
     if node is None:
         raise _invalid("Filter is empty.")
-    if isinstance(node, dict) and set(node) in ({"filters"}, {"filters", "order"}):
+    if isinstance(node, dict) and "filters" in node and set(node) <= {"filters", "order", "edit"}:
         order = node.get("order", [])
         if not isinstance(order, list) or not all(isinstance(name, str) for name in order):
             raise _invalid("`order:` must be a list of attribute names, e.g. order: [status, header].")
         columns = [name for name in order if name != "uid"] if "order" in node else None
-        return _compile(node["filters"]), columns
-    return _compile(node), None
+        edit = compile_edit(node["edit"]) if "edit" in node else None
+        return _compile(node["filters"]), columns, edit
+    return _compile(node), None, None
 
 
 @router.post("/filter", response_model=FilterResponse)
 async def filter_items(body: FilterRequest, tree=Depends(get_tree_for_reading)) -> FilterResponse:
-    predicate, columns = compile_filter(body.query)
+    predicate, columns, edit = compile_filter(body.query)
     default_columns = columns is None
     columns = DEFAULT_COLUMNS if columns is None else columns
     load_items(tree)
@@ -268,7 +274,8 @@ async def filter_items(body: FilterRequest, tree=Depends(get_tree_for_reading)) 
             )
             for item in ordered
             if predicate(item, index)
-        ]
+        ],
+        editable=edit is not None,
     )
 
 
@@ -288,10 +295,12 @@ async def filter_vocabulary(
             for name, value in item.data.items():
                 if name in _STANDARD or is_protected_field(item, name):
                     continue
-                # A list- or dict-valued attribute is still a name to suggest, without values.
+                # A dict-valued attribute is still a name to suggest, without values; a list
+                # suggests its entries (appendEntry / removeEntry, spec 036 FR-017).
                 found = values.setdefault(name, set())
-                if isinstance(value, (str, int, float, bool)) and str(value) != "":
-                    found.add(str(value))
+                for entry in value if isinstance(value, list) else [value]:
+                    if isinstance(entry, (str, int, float, bool)) and str(entry) != "":
+                        found.add(str(entry))
     response = FilterVocabulary(
         attributes={
             name: sorted(found)[:_MAX_SUGGESTED_VALUES] for name, found in sorted(values.items())

@@ -7,6 +7,7 @@ from doorstop_server.errors import register_exception_handlers
 from doorstop_server.lock import SerializeRequestsMiddleware
 from doorstop_server.validation_worker import Validator
 from doorstop_server.routers import (
+    batch,
     documents,
     filters,
     health,
@@ -47,5 +48,6 @@ def create_app(settings: Settings) -> FastAPI:
     app.include_router(tree.router)
     app.include_router(validation.router)
     app.include_router(filters.router)
+    app.include_router(batch.router)
 
     return app

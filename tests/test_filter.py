@@ -339,7 +339,7 @@ def test_vocabulary_lists_custom_attribute_values(project):
         assert standard not in attributes
 
 
-# Spec 022 FR-016
+# Spec 022 FR-016, Spec 036 FR-017
 def test_vocabulary_follows_changes(project, project_root):
     assert project.get("/filter/vocabulary").json()["attributes"]["status"] == ["approved", "draft"]
     set_custom(project_root, "TST-002", "status", "blocked")
@@ -347,4 +347,30 @@ def test_vocabulary_follows_changes(project, project_root):
 
     attributes = project.get("/filter/vocabulary").json()["attributes"]
     assert attributes["status"] == ["approved", "blocked", "draft"]
-    assert attributes["tags"] == []
+    # List entries are suggested for appendEntry / removeEntry (spec 036).
+    assert attributes["tags"] == ["a", "b"]
+
+
+# --- Spec 036: the edit: section --------------------------------------------
+
+
+# Spec 036 FR-001, FR-003
+def test_edit_section_makes_the_result_editable(project):
+    for query in (
+        'filters: document == "TST"\nedit:\n  - set: {status: "done"}\n',
+        'filters: document == "TST"\norder: [status]\nedit:\n  - appendEntry: {runs: "TR-1"}\n',
+    ):
+        response = run(project, query)
+        assert response.status_code == 200, response.text
+        assert response.json()["editable"] is True
+        assert [item["uid"] for item in response.json()["items"]] == ["TST-001", "TST-002", "TST-003"]
+    assert run(project, 'filters: document == "TST"\norder: [status]\n').json()["editable"] is False
+    assert run(project, 'document == "TST"').json()["editable"] is False
+
+
+# Spec 036 FR-003
+def test_invalid_edit_section_fails_the_run(project):
+    response = run(project, 'filters: document == "TST"\nedit:\n  - apendEntry: {runs: "TR-1"}\n')
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "INVALID_EDIT"
+    assert "apendEntry" in response.json()["error"]["message"]

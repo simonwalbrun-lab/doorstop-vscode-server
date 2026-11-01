@@ -205,8 +205,33 @@ class FilterResponse(BaseModel):
     # Table columns after UID: the cell's `order:` or the default columns.
     columns: List[str]
     items: List[FilterItem]
+    # The cell has a valid `edit:` section (spec 036): the table offers "Apply to selected".
+    editable: bool = False
 
 
 class FilterVocabulary(BaseModel):
     # Custom attribute name -> its distinct scalar values (filter autocomplete, spec 022 FR-016).
     attributes: Dict[str, List[str]]
+
+
+class BatchRequest(BaseModel):
+    # The filter cell text as it was run; its `edit:` section is applied (spec 036).
+    query: str
+    uids: List[str]
+    # Report what would happen without writing (confirmation counts, FR-010).
+    dryRun: bool = False
+
+
+class BatchItemResult(BaseModel):
+    # The ticked item; for generateChildren the parent.
+    uid: str
+    status: Literal["changed", "created", "overwritten", "skipped", "failed"]
+    reason: Optional[str] = None
+    # generateChildren: the child's UID.
+    created: Optional[str] = None
+
+
+class BatchResponse(BaseModel):
+    results: List[BatchItemResult]
+    # The edit's operations in words ("set testrun"), for the confirmation (FR-010).
+    operations: List[str]
