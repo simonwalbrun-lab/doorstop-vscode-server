@@ -10,8 +10,8 @@ from doorstop.core.types import _Literal
 
 from doorstop_server.config import Settings
 
-# The same folders doorstop.core.builder.build() skips when it looks for documents.
-_EXCLUDED_DIRS = {".git", ".tox", ".venv", "venv"}
+# The folders doorstop.core.builder.build() skips, plus dependency/cache folders that never hold documents.
+_EXCLUDED_DIRS = {".git", ".tox", ".venv", "venv", "node_modules", "__pycache__"}
 
 
 def load_tree(settings: Settings) -> doorstop.Tree:
