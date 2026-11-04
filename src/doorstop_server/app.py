@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from doorstop_server.config import Settings
 from doorstop_server.doorstop_tree import use_libyaml
@@ -6,6 +7,7 @@ from doorstop_server.errors import register_exception_handlers
 from doorstop_server.lock import SerializeRequestsMiddleware
 from doorstop_server.validation_worker import Validator
 from doorstop_server.routers import (
+    batch,
     documents,
     filters,
     health,
@@ -29,9 +31,13 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.validator = Validator(settings.project_root)
     # GET /tree answers per `fields` value, valid while tree_version is unchanged.
     app.state.tree_responses = {}
+    # GET /filter/vocabulary answer, same tree_version rule.
+    app.state.filter_vocabulary = None
     use_libyaml()
 
     app.add_middleware(SerializeRequestsMiddleware)
+    # Added last, so it runs first: a DNS-rebinding page sends its own host name.
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
     register_exception_handlers(app)
 
     app.include_router(health.router)
@@ -42,5 +48,6 @@ def create_app(settings: Settings) -> FastAPI:
     app.include_router(tree.router)
     app.include_router(validation.router)
     app.include_router(filters.router)
+    app.include_router(batch.router)
 
     return app

@@ -20,6 +20,8 @@ or, after installing:
 doorstop-vscode-server --project <path-to-doorstop-project-root> --host 127.0.0.1 --port 7867
 ```
 
+Once bound, the server prints `DOORSTOP_PORT=<port>` on stdout; `--port 0` picks a free port. The extension starts it with `--port 0 --exit-on-stdin-eof`, so the server exits when the extension host closes its stdin (or dies).
+
 ## API
 
 See `src/doorstop_server/routers/` for the endpoint implementations. `GET /health` and `GET /validate` are the only routes not serialized behind the request lock. `/validate` hands the check to a long-lived worker process with its own read-only copy of the tree (`validation_worker.py`, spec 032), so a running check does not slow other requests down.

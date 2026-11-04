@@ -50,7 +50,8 @@ def test_read_only_requests_leave_the_cached_tree_as_a_fresh_build_would(client,
     client.post("/filter", json={"query": ""})
 
     cached = client.get("/tree").json()
-    fresh_client = TestClient(create_app(Settings(project_root=str(project_root), host="127.0.0.1", port=0)))
+    settings = Settings(project_root=str(project_root), host="127.0.0.1", port=0)
+    fresh_client = TestClient(create_app(settings), base_url="http://127.0.0.1")
 
     assert cached == fresh_client.get("/tree").json()
     assert client.get("/validate").json() == fresh_client.get("/validate").json()

@@ -30,7 +30,7 @@ def test_unexpected_exception_becomes_structured_500(client):
         # (so real ASGI servers can log it) - the client already received the right
         # response either way; raise_server_exceptions=False just stops TestClient
         # from also surfacing that re-raise to the test itself.
-        no_raise_client = TestClient(app, raise_server_exceptions=False)
+        no_raise_client = TestClient(app, base_url="http://127.0.0.1", raise_server_exceptions=False)
         response = no_raise_client.get("/tree")
     finally:
         app.dependency_overrides.pop(get_tree_for_reading, None)

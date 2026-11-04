@@ -67,7 +67,7 @@ def test_a_queued_request_reports_its_wait(tmp_path: Path, monkeypatch):
 
     async def run() -> list[dict]:
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as async_client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as async_client:
             created = await async_client.post(
                 "/documents", json={"prefix": "REQ", "path": str(tmp_path / "reqs" / "REQ")}
             )

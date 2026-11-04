@@ -18,7 +18,7 @@ def project_root(tmp_path: Path) -> Path:
 def client(project_root: Path) -> Iterator[TestClient]:
     settings = Settings(project_root=str(project_root), host="127.0.0.1", port=0)
     app = create_app(settings)
-    yield TestClient(app)
+    yield TestClient(app, base_url="http://127.0.0.1")
     app.state.validator.close()  # stops the validation worker, if a test started one
 
 

@@ -66,6 +66,9 @@ def get_tree(request: Request) -> Iterator[doorstop.Tree]:
         state.validator.cancel("changed")  # it may have written part of its change
         raise
     before = state.tree_fingerprint
+    if before is None:  # the request asked for a full rebuild (spec 036: an item failed to write)
+        state.validator.cancel("changed")
+        return
     after = fingerprint(get_settings(request).project_root)
     written = {path for path in before.keys() | after.keys() if before.get(path) != after.get(path)}
     if written:

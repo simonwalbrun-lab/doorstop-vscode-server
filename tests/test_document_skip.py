@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from doorstop_server.doorstop_tree import find_skipped_documents, fingerprint
+
 from .conftest import add_document, add_item
 
 
@@ -123,3 +125,19 @@ def test_editing_an_item_of_a_disabled_document_says_the_document_is_disabled(cl
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "DOCUMENT_DISABLED"
     assert document["prefix"] in response.json()["error"]["message"]
+
+
+# node_modules and __pycache__ cannot hold Doorstop documents, so neither walk enters them.
+def test_dependency_and_cache_folders_are_not_walked(client, document, project_root):
+    for folder in ("node_modules/pkg", "__pycache__"):
+        path = project_root / folder
+        path.mkdir(parents=True)
+        (path / ".doorstop.yml").write_text("settings:\n  digits: 3\n  prefix: NPM\n  sep: ''\n")
+        (path / ".doorstop.skip").touch()
+        (path / "config.yml").write_text("x: 1")
+
+    files = fingerprint(str(project_root))
+
+    assert not [f for f in files if "node_modules" in f or "__pycache__" in f]
+    assert find_skipped_documents(str(project_root)) == []
+    assert client.get("/tree").json()["skippedDocuments"] == []

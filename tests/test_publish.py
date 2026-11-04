@@ -48,3 +48,23 @@ def test_no_child_links_applies_and_restores_setting(client, document, child_doc
 # Spec 028 FR-005
 def test_ci_wrapper_module_is_gone():
     assert importlib.util.find_spec("doorstop_server.publish") is None
+
+
+# Spec 035 FR-012
+def test_published_html_resolves_attachment_links(client, document, project_root, tmp_path):
+    """An image pasted into item text lives in the document's `assets` folder and is
+    linked as `assets/<name>`; that link must still work in the published HTML."""
+    assets = project_root / "reqs" / "REQ" / "assets"
+    assets.mkdir()
+    (assets / "shot.png").write_bytes(b"PNG")
+    add_item(client, text="![shot.png](assets/shot.png)")
+    out = tmp_path / "out"
+    response = client.post(
+        f"/documents/{document['prefix']}/publish",
+        json={"format": "html", "destinationPath": str(out)},
+    )
+    assert response.status_code == 200, response.text
+    pages = [page for page in out.rglob("*.html") if 'src="assets/shot.png"' in page.read_text(encoding="utf8")]
+    assert pages, sorted(str(path.relative_to(out)) for path in out.rglob("*"))
+    for page in pages:
+        assert (page.parent / "assets" / "shot.png").read_bytes() == b"PNG", page
